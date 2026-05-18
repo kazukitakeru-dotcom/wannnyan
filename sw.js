@@ -1,7 +1,6 @@
 const CACHE_NAME = 'wannyan-v2';
 const ASSETS = [
   './',
-  './index.html',
   './style.css',
   './app.js',
   './manifest.json',
