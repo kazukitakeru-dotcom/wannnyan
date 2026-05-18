@@ -217,3 +217,18 @@ textarea.field-input { resize: vertical; min-height: 76px; line-height: 1.6; }
 .btn-transfer.import { background: #4caf80; color: white; }
 .btn-transfer.danger { background: rgba(224,80,80,0.1); color: var(--red); border: 1.5px solid var(--red); }
 .transfer-divider { height: 1px; background: rgba(44,36,24,0.08); margin: 16px 0; }
+/* iOS Safari のデフォルト青色を無効化 */
+a, button {
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 戻るボタン・タイトル文字が青くなる場合 */
+.back-btn,
+.back-arrow,
+.header-title,
+.card-label,
+.card-sub {
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+}
