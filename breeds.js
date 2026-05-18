@@ -187,8 +187,83 @@ const DOG_BREEDS = [
   { ja: 'アッペンツェラー', en: 'Appenzeller Sennenhund', group: 'その他' },
 ];
 
+// 全猫種データ（日本語名・英語名・グループ）
+const CAT_BREEDS = [
+  // 雑種・不明
+  { ja: '雑種', en: 'Mixed Breed', group: '雑種・不明' },
+  { ja: '不明', en: 'Unknown', group: '雑種・不明' },
+  { ja: '日本猫', en: 'Japanese Cat', group: '雑種・不明' },
+
+  // 短毛種
+  { ja: 'アメリカン・ショートヘア', en: 'American Shorthair', group: '短毛種' },
+  { ja: 'アビシニアン', en: 'Abyssinian', group: '短毛種' },
+  { ja: 'エキゾチック・ショートヘア', en: 'Exotic Shorthair', group: '短毛種' },
+  { ja: 'オシキャット', en: 'Ocicat', group: '短毛種' },
+  { ja: 'オリエンタル・ショートヘア', en: 'Oriental Shorthair', group: '短毛種' },
+  { ja: 'エジプシャン・マウ', en: 'Egyptian Mau', group: '短毛種' },
+  { ja: 'コラット', en: 'Korat', group: '短毛種' },
+  { ja: 'シャム', en: 'Siamese', group: '短毛種' },
+  { ja: 'シャルトリュー', en: 'Chartreux', group: '短毛種' },
+  { ja: 'シンガプーラ', en: 'Singapura', group: '短毛種' },
+  { ja: 'スコティッシュ・ストレート（短毛）', en: 'Scottish Straight', group: '短毛種' },
+  { ja: 'スノーシュー', en: 'Snowshoe', group: '短毛種' },
+  { ja: 'ソコケ', en: 'Sokoke', group: '短毛種' },
+  { ja: 'タイ', en: 'Thai', group: '短毛種' },
+  { ja: 'トイガー', en: 'Toyger', group: '短毛種' },
+  { ja: 'トンキニーズ', en: 'Tonkinese', group: '短毛種' },
+  { ja: 'ハバナ・ブラウン', en: 'Havana Brown', group: '短毛種' },
+  { ja: 'バーミーズ', en: 'Burmese', group: '短毛種' },
+  { ja: 'ベンガル', en: 'Bengal', group: '短毛種' },
+  { ja: 'ボンベイ', en: 'Bombay', group: '短毛種' },
+  { ja: 'ブリティッシュ・ショートヘア', en: 'British Shorthair', group: '短毛種' },
+  { ja: 'ロシアンブルー', en: 'Russian Blue', group: '短毛種' },
+
+  // 長毛種
+  { ja: 'アメリカン・ボブテイル', en: 'American Bobtail', group: '長毛種' },
+  { ja: 'オリエンタル・ロングヘア', en: 'Oriental Longhair', group: '長毛種' },
+  { ja: 'サイベリアン', en: 'Siberian', group: '長毛種' },
+  { ja: 'サファリ', en: 'Safari', group: '長毛種' },
+  { ja: 'ジャパニーズ・ボブテイル', en: 'Japanese Bobtail', group: '長毛種' },
+  { ja: 'ソマリ', en: 'Somali', group: '長毛種' },
+  { ja: 'ターキッシュ・アンゴラ', en: 'Turkish Angora', group: '長毛種' },
+  { ja: 'ターキッシュ・バン', en: 'Turkish Van', group: '長毛種' },
+  { ja: 'ノルウェージャン・フォレスト・キャット', en: 'Norwegian Forest Cat', group: '長毛種' },
+  { ja: 'バーマン', en: 'Birman', group: '長毛種' },
+  { ja: 'バリニーズ', en: 'Balinese', group: '長毛種' },
+  { ja: 'ヒマラヤン', en: 'Himalayan', group: '長毛種' },
+  { ja: 'ブリティッシュ・ロングヘア', en: 'British Longhair', group: '長毛種' },
+  { ja: 'ペルシャ', en: 'Persian', group: '長毛種' },
+  { ja: 'メイン・クーン', en: 'Maine Coon', group: '長毛種' },
+  { ja: 'ラガマフィン', en: 'Ragamuffin', group: '長毛種' },
+  { ja: 'ラグドール', en: 'Ragdoll', group: '長毛種' },
+
+  // 特徴種
+  { ja: 'アメリカン・カール', en: 'American Curl', group: '耳や尾の特徴種' },
+  { ja: 'キムリック', en: 'Cymric', group: '耳や尾の特徴種' },
+  { ja: 'スコティッシュ・フォールド', en: 'Scottish Fold', group: '耳や尾の特徴種' },
+  { ja: 'マンクス', en: 'Manx', group: '耳や尾の特徴種' },
+
+  // 短足種
+  { ja: 'マンチカン', en: 'Munchkin', group: '短足種' },
+  { ja: 'ミヌエット', en: 'Minuet', group: '短足種' },
+  { ja: 'キンカロー', en: 'Kinkalow', group: '短足種' },
+  { ja: 'スクーカム', en: 'Skookum', group: '短足種' },
+  { ja: 'ラムキン', en: 'Lambkin', group: '短足種' },
+
+  // 特殊種
+  { ja: 'コーニッシュ・レックス', en: 'Cornish Rex', group: '巻き毛・無毛・特殊種' },
+  { ja: 'サバンナ・キャット', en: 'Savannah Cat', group: '巻き毛・無毛・特殊種' },
+  { ja: 'セルカーク・レックス', en: 'Selkirk Rex', group: '巻き毛・無毛・特殊種' },
+  { ja: 'スフィンクス', en: 'Sphynx', group: '巻き毛・無毛・特殊種' },
+  { ja: 'デボン・レックス', en: 'Devon Rex', group: '巻き毛・無毛・特殊種' },
+  { ja: 'ドンスコイ', en: 'Donskoy', group: '巻き毛・無毛・特殊種' },
+  { ja: 'ピーターボールド', en: 'Peterbald', group: '巻き毛・無毛・特殊種' },
+  { ja: 'ラパーマ', en: 'LaPerm', group: '巻き毛・無毛・特殊種' },
+  { ja: 'ライコイ', en: 'Lykoi', group: '巻き毛・無毛・特殊種' },
+];
+
 // 重複除去＆ソート
-const BREEDS_UNIQUE = (() => {
+const DOG_BREEDS_UNIQUE = (() => {
   const seen = new Set();
   return DOG_BREEDS.filter(b => {
     if (seen.has(b.ja)) return false;
@@ -196,3 +271,15 @@ const BREEDS_UNIQUE = (() => {
     return true;
   });
 })();
+
+const CAT_BREEDS_UNIQUE = (() => {
+  const seen = new Set();
+  return CAT_BREEDS.filter(b => {
+    if (seen.has(b.ja)) return false;
+    seen.add(b.ja);
+    return true;
+  });
+})();
+
+const BREEDS_UNIQUE = DOG_BREEDS_UNIQUE;
+

@@ -133,7 +133,10 @@ function renderList() {
   const pets = data[currentType]||[];
   const rawSearch = document.getElementById('search-input').value.trim();
   const search = toHiragana(rawSearch).toLowerCase();
-  let filtered = search ? pets.filter(p=>toHiragana(p.name||'').toLowerCase().includes(search)) : pets;
+  let filtered = search ? pets.filter(p=>
+    toHiragana(p.name||'').toLowerCase().includes(search) ||
+    toHiragana(p.breed||'').toLowerCase().includes(search)
+  ) : pets;
   const sorted = [...filtered].sort((a,b)=>
     sortMode==='name' ? (a.name||'').localeCompare(b.name||'','ja') : (b.updatedAt||0)-(a.updatedAt||0)
   );
@@ -193,26 +196,27 @@ function renderDetailContent(pet, isEditing) {
   if(pet.birthday){ ageDisplay=calcAge(pet.birthday)||''; }
   else { ageDisplay=pet.age||'不明'; ageNote=`（${todayStr()}時点）`; }
 
-  // 犬種（犬のみ）
+  // 犬種・猫種（両対応）
   let breedSection = '';
-  if(currentType==='dog') {
+  if(currentType==='dog' || currentType==='cat') {
+    const breedLabel = currentType==='dog'?'犬種':'猫種';
     const breedVal = pet.breed||'';
     const isMixed = breedVal==='雑種';
     const breedViewHtml = breedVal || '未設定';
     const mixedViewHtml = isMixed ? (pet.parent1||pet.parent2 ? `親1：${escHtml(pet.parent1||'不明')}　親2：${escHtml(pet.parent2||'不明')}` : '') : '';
     breedSection = `
       <div class="detail-field">
-        <label class="field-label">犬種</label>
+        <label class="field-label">${breedLabel}</label>
         <div class="view-only field-value">${escHtml(breedViewHtml)}${mixedViewHtml?`<div class="field-age-note">${mixedViewHtml}</div>`:''}</div>
         <div class="edit-only">
           <button class="breed-display-btn" onclick="openBreedModal()" id="breed-btn">
-            <span id="breed-btn-label" class="${breedVal?'':'placeholder'}">${breedVal||'タップして犬種を選択'}</span>
+            <span id="breed-btn-label" class="${breedVal?'':'placeholder'}">${breedVal||`タップして${breedLabel}を選択`}</span>
             <span>›</span>
           </button>
           <input type="hidden" id="edit-breed" value="${escHtml(pet.breed||'')}">
           <div id="mixed-parents-wrap" class="mixed-parents" style="margin-top:8px;display:${isMixed?'flex':'none'}">
-            <input type="text" class="field-input" id="edit-parent1" placeholder="親1の犬種" value="${escHtml(pet.parent1||'')}">
-            <input type="text" class="field-input" id="edit-parent2" placeholder="親2の犬種" value="${escHtml(pet.parent2||'')}">
+            <input type="text" class="field-input" id="edit-parent1" placeholder="親1の${breedLabel}" value="${escHtml(pet.parent1||'')}">
+            <input type="text" class="field-input" id="edit-parent2" placeholder="親2の${breedLabel}" value="${escHtml(pet.parent2||'')}">
           </div>
         </div>
       </div>`;
@@ -374,11 +378,14 @@ function savePet() {
   pet.weight=(document.getElementById('edit-weight')?.value||'').trim();
   pet.memo=document.getElementById('edit-memo')?.value||'';
   pet.updatedAt=Date.now();
-  if(currentType==='dog'){
+  if(currentType==='dog' || currentType==='cat'){
     pet.breed=document.getElementById('edit-breed')?.value||'';
     if(pet.breed==='雑種'){
       pet.parent1=document.getElementById('edit-parent1')?.value||'';
       pet.parent2=document.getElementById('edit-parent2')?.value||'';
+    } else {
+      pet.parent1 = '';
+      pet.parent2 = '';
     }
   }
   if(tempPhotoData)pet.photo=tempPhotoData;
@@ -406,7 +413,18 @@ function setBreedSort(mode){
   renderBreedList();
 }
 function openBreedModal(){
-  document.getElementById('breed-search-input').value='';
+  const breedLabel = currentType==='dog'?'犬種':'猫種';
+  const title = `${breedLabel}を選択`;
+  const placeholder = `${breedLabel}を検索…`;
+  
+  const modalTitleEl = document.querySelector('#modal-breed .modal-title');
+  if(modalTitleEl) modalTitleEl.textContent = title;
+  const searchInputEl = document.getElementById('breed-search-input');
+  if(searchInputEl) {
+    searchInputEl.value = '';
+    searchInputEl.placeholder = placeholder;
+  }
+  
   breedSortCurrent='group';
   document.getElementById('bsort-group').classList.add('active');
   document.getElementById('bsort-alpha').classList.remove('active');
@@ -416,7 +434,8 @@ function openBreedModal(){
 function renderBreedList(){
   const query=toHiragana((document.getElementById('breed-search-input').value||'').trim()).toLowerCase();
   const currentBreed=document.getElementById('edit-breed')?.value||'';
-  let list=BREEDS_UNIQUE.filter(b=>!query||toHiragana(b.ja).toLowerCase().includes(query)||b.en.toLowerCase().includes(query));
+  const breedSource = currentType==='dog' ? DOG_BREEDS_UNIQUE : CAT_BREEDS_UNIQUE;
+  let list=breedSource.filter(b=>!query||toHiragana(b.ja).toLowerCase().includes(query)||b.en.toLowerCase().includes(query));
   const container=document.getElementById('breed-list');
   if(breedSortCurrent==='alpha'){
     list=[...list].sort((a,b)=>a.ja.localeCompare(b.ja,'ja'));
@@ -442,6 +461,11 @@ function selectBreed(name){
   if(btnLabel){ btnLabel.textContent=name; btnLabel.classList.remove('placeholder'); }
   const mixedWrap=document.getElementById('mixed-parents-wrap');
   if(mixedWrap) mixedWrap.style.display=name==='雑種'?'flex':'none';
+  const breedLabel = currentType==='dog'?'犬種':'猫種';
+  const p1 = document.getElementById('edit-parent1');
+  const p2 = document.getElementById('edit-parent2');
+  if(p1) p1.placeholder = `親1の${breedLabel}`;
+  if(p2) p2.placeholder = `親2の${breedLabel}`;
   closeModal(null,'modal-breed');
 }
 
@@ -450,7 +474,10 @@ function renderFolderScreen(){
   const data=loadData(); const pets=data[currentType]||[];
   const rawSearch=(document.getElementById('folder-search')?.value||'').trim();
   const search=toHiragana(rawSearch).toLowerCase();
-  const filtered=search?pets.filter(p=>toHiragana(p.name||'').toLowerCase().includes(search)):pets;
+  const filtered=search?pets.filter(p=>
+    toHiragana(p.name||'').toLowerCase().includes(search) ||
+    toHiragana(p.breed||'').toLowerCase().includes(search)
+  ):pets;
   const issues=ISSUES[currentType];
   const container=document.getElementById('folder-content');
   let html='';
@@ -463,10 +490,11 @@ function renderFolderScreen(){
         :withIssue.map(p=>{
           const memo=(p.issues[issue.key]?.memo)||'';
           const photoHtml=p.photo?`<div class="folder-pet-photo"><img src="${p.photo}" alt="${escHtml(p.name)}"></div>`:`<div class="folder-pet-photo">${currentType==='dog'?'🐕':'🐈'}</div>`;
+          const breedText=p.breed?`<span class="folder-pet-breed">${escHtml(p.breed)}</span>`:'';
           return `<div class="folder-pet-card" onclick="openDetail('${p.id}');closeIssueFolder2();">
             ${photoHtml}
             <div>
-              <div class="folder-pet-name">${escHtml(p.name)}</div>
+              <div class="folder-pet-name">${escHtml(p.name)}${breedText}</div>
               <div class="folder-pet-memo">${escHtml(memo)}</div>
             </div>
           </div>`;
@@ -604,7 +632,7 @@ function renderSurveyContent(pet, isEditing){
         <label class="field-label">名前</label><div class="field-value">${escHtml(pet.name)}</div>
       </div>
       <div class="detail-field">
-        <label class="field-label">犬種</label><div class="field-value">${escHtml(pet.breed||'不明')}</div>
+        <label class="field-label">${currentType==='dog'?'犬種':'猫種'}</label><div class="field-value">${escHtml(pet.breed||'不明')}</div>
       </div>
       <div class="detail-field">
         <label class="field-label">生年月日</label><div class="field-value">${pet.birthday?formatDate(pet.birthday):'不明'}</div>
