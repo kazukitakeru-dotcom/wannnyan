@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="わんにゃんメモリー">
+  <meta name="theme-color" content="#f5ede0">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/01.png">
+  <title>わんにゃんメモリー</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 選択画面 -->
+    <div id="screen-select" class="screen active">
+      <div class="select-bg"></div>
+      <div class="select-content">
+        <div class="app-logo">
+          <div class="logo-paw">🐾</div>
+          <h1 class="app-title">わんにゃん<br>メモリー</h1>
+          <p class="app-sub">大切なペットの記録帳</p>
+        </div>
+        <div class="select-cards">
+          <button class="select-card dog-card" onclick="selectType('dog')">
+            <div class="card-emoji">🐕</div>
+            <div class="card-label">いぬ</div>
+            <div class="card-sub">Dog</div>
+          </button>
+          <button class="select-card cat-card" onclick="selectType('cat')">
+            <div class="card-emoji">🐈</div>
+            <div class="card-label">ねこ</div>
+            <div class="card-sub">Cat</div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- リスト画面 -->
+    <div id="screen-list" class="screen">
+      <header class="app-header">
+        <button class="back-btn" onclick="goBack()">
+          <span class="back-arrow">←</span>
+        </button>
+        <div class="header-title">
+          <span id="list-type-emoji"></span>
+          <span id="list-type-name"></span>
+          <span>のリスト</span>
+        </div>
+        <button class="add-btn" onclick="openAddModal()">＋</button>
+      </header>
+
+      <div class="list-controls">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" class="search-input" placeholder="名前で検索…" oninput="filterList()">
+        </div>
+        <div class="sort-buttons">
+          <button class="sort-btn active" id="sort-name-btn" onclick="sortList('name')">名前順</button>
+          <button class="sort-btn" id="sort-date-btn" onclick="sortList('date')">記録日順</button>
+        </div>
+      </div>
+
+      <div id="pet-list" class="pet-list"></div>
+
+      <button class="fab-add" onclick="openAddModal()">＋</button>
+    </div>
+
+    <!-- 詳細画面 -->
+    <div id="screen-detail" class="screen">
+      <header class="app-header">
+        <button class="back-btn" onclick="goToList()">
+          <span class="back-arrow">←</span>
+        </button>
+        <div class="header-title" id="detail-header-name">詳細</div>
+        <button class="edit-toggle-btn" id="edit-toggle-btn" onclick="toggleEditMode()">編集</button>
+      </header>
+
+      <div id="detail-content" class="detail-content">
+        <!-- 動的に生成 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル：新規追加 -->
+  <div id="modal-add" class="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">新しい子を追加</h3>
+        <button class="modal-close" onclick="closeAddModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">名前 <span class="required">*</span></label>
+        <input type="text" id="new-name" class="field-input" placeholder="名前を入力">
+
+        <label class="field-label">生年月日</label>
+        <input type="date" id="new-birthday" class="field-input">
+
+        <label class="field-label">年齢（生年月日未入力時）</label>
+        <input type="text" id="new-age" class="field-input" placeholder="例: 3歳2ヶ月">
+
+        <label class="field-label">写真</label>
+        <div class="photo-upload-area" onclick="document.getElementById('new-photo-input').click()">
+          <img id="new-photo-preview" class="photo-preview hidden" src="" alt="">
+          <div id="new-photo-placeholder" class="photo-placeholder">
+            <span>📷</span>
+            <span>タップして写真を選択</span>
+          </div>
+          <input type="file" id="new-photo-input" accept="image/*" class="hidden" onchange="previewNewPhoto(event)">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeAddModal()">キャンセル</button>
+        <button class="btn-primary" onclick="addPet()">追加する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 削除確認モーダル -->
+  <div id="modal-delete" class="modal-overlay" onclick="closeDeleteModal(event)">
+    <div class="modal-box modal-box-small">
+      <div class="modal-header">
+        <h3 class="modal-title">削除の確認</h3>
+      </div>
+      <div class="modal-body">
+        <p style="text-align:center; color:#666;">この子の記録を削除しますか？<br>この操作は取り消せません。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeDeleteModal()">キャンセル</button>
+        <button class="btn-danger" onclick="confirmDelete()">削除する</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
