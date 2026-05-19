@@ -204,15 +204,19 @@
     <div class="hospital-tabs">
       <button class="hospital-tab-btn active" onclick="switchHospitalTab('care-weight')">
         <span class="tab-icon">🐾</span>
-        <span class="tab-label">ケア・体重</span>
+        <span class="tab-label">日常ケア</span>
       </button>
       <button class="hospital-tab-btn" onclick="switchHospitalTab('medical-history')">
         <span class="tab-icon">🏥</span>
         <span class="tab-label">通院履歴</span>
       </button>
+      <button class="hospital-tab-btn" onclick="switchHospitalTab('medicine-tab')">
+        <span class="tab-icon">💊</span>
+        <span class="tab-label">お薬</span>
+      </button>
       <button class="hospital-tab-btn" onclick="switchHospitalTab('hospital-master')">
         <span class="tab-icon">🏢</span>
-        <span class="tab-label">病院紹介</span>
+        <span class="tab-label">病院一覧</span>
       </button>
       <button class="hospital-tab-btn" onclick="switchHospitalTab('certificates')">
         <span class="tab-icon">📜</span>
@@ -229,7 +233,7 @@
           <div class="detail-card-title">✨ 日常ケア（1タップ完了記録）</div>
           <div class="quick-care-date-selector">
             <label class="field-label" style="margin-bottom:0">記録日：</label>
-            <input type="date" id="quick-care-date" class="field-input quick-date-input" onchange="renderQuickCares()">
+            <input type="date" id="quick-care-date" class="field-input quick-date-input" onchange="onQuickCareDateChange()">
           </div>
           <div class="quick-care-grid">
             <button class="quick-care-btn" id="care-nail" onclick="toggleQuickCare('nail')">
@@ -247,6 +251,11 @@
               <span class="care-label">ノミ・ダニ予防</span>
               <span class="care-status">未完了</span>
             </button>
+          </div>
+          
+          <p class="issue-memo-label" style="margin-top:14px; margin-bottom: 6px;">💊 本日のお薬チェック（タップで増加 / ーで減少）</p>
+          <div class="medicine-care-grid" id="medicine-care-grid">
+            <!-- JSで登録されている薬を動的に構築 -->
           </div>
         </div>
 
@@ -286,6 +295,17 @@
         
         <div id="medical-timeline-container" class="medical-timeline-container">
           <!-- タイムラインアコーディオンがここに描画されます -->
+        </div>
+      </div>
+
+      <!-- お薬管理タブ（NEW） -->
+      <div id="tab-medicine-tab" class="hospital-tab-content">
+        <div class="hospital-master-header">
+          <p class="hospital-master-desc">毎日飲むお薬や、頓服薬を登録して日常ケアで簡単に服用記録を残せます。▲▼ボタンで並び順の調整も可能です。</p>
+          <button class="btn-primary add-medicine-btn" onclick="openMedicineModal()">＋ お薬を登録する</button>
+        </div>
+        <div id="medicine-list-container" class="medicine-list-container">
+          <!-- JSでお薬カードを動的構築 -->
         </div>
       </div>
 
@@ -330,6 +350,12 @@
         <input type="text" id="h-doctor" class="field-input" placeholder="例: 山田先生">
         <label class="field-label">病院の特色・印象 (メモ)</label>
         <textarea id="h-memo" class="field-input" rows="3" placeholder="夜間対応あり、優しい、日曜日開院など"></textarea>
+
+        <label class="field-label" style="margin-top:10px;">📋 治療メニュー・料金表（目安価格）</label>
+        <div id="hospital-price-editor" class="hospital-price-editor" style="display:flex;flex-direction:column;gap:8px;">
+          <!-- JSで動的に追加削除行を生成します -->
+        </div>
+        <button type="button" class="allergy-add-btn" onclick="addPriceEditRow()" style="margin-top:8px;padding:6px;font-size:12px;">＋ 料金メニューを追加</button>
       </div>
       <div class="modal-footer">
         <button class="btn-cancel" onclick="closeModal(null,'modal-hospital')">キャンセル</button>
@@ -370,6 +396,19 @@
         <label class="field-label">治療費・値段 (円)</label>
         <input type="number" id="m-cost" class="field-input" placeholder="例: 5400" min="0">
 
+        <label class="field-label">今回測定した体重 (kg)（任意）</label>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+          <input type="number" id="m-weight" class="field-input" placeholder="例: 4.5" step="0.01" min="0" style="flex:1">
+          <span style="font-size:14px;color:var(--text-light);white-space:nowrap">kg</span>
+        </div>
+
+        <label class="field-label">今回やってもらった日常ケア（完了に自動連動）</label>
+        <div class="care-checkbox-grid" style="display:flex;gap:12px;margin-bottom:12px;margin-top:2px;">
+          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-nail"> 💅 爪切り</label>
+          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-tooth"> 🪥 歯磨き</label>
+          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-flea"> 💊 ノミダニ</label>
+        </div>
+
         <label class="field-label">診療内容・症状メモ (自分だけの口コミ)</label>
         <textarea id="m-notes" class="field-input" rows="4" placeholder="例: 外耳炎の治療。薬を処方してもらった。"></textarea>
 
@@ -404,7 +443,10 @@
 
         <div id="c-name-wrap">
           <label class="field-label">ワクチンの種類/製品名 <span class="required">*</span></label>
-          <input type="text" id="c-name" class="field-input" placeholder="例: 7種混合ワクチン">
+          <select id="c-name-select" class="field-input" onchange="onCertVaccineSelectChange()" style="margin-bottom:8px;">
+            <!-- JSで動的に犬用・猫用のプリセット肢を生成 -->
+          </select>
+          <input type="text" id="c-name" class="field-input hidden" placeholder="ワクチンの種類/製品名を入力してください">
         </div>
 
         <div id="c-result-wrap">
@@ -424,6 +466,77 @@
       <div class="modal-footer">
         <button class="btn-cancel" onclick="closeModal(null,'modal-certificate')">キャンセル</button>
         <button class="btn-primary" onclick="saveCertificateRecord()">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル：お薬の登録・編集 -->
+  <div id="modal-medicine" class="modal-overlay" onclick="closeModal(event,'modal-medicine')">
+    <div class="modal-box modal-box-tall">
+      <div class="modal-header">
+        <h3 class="modal-title" id="medicine-modal-title">お薬を登録</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-medicine')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-medicine-id">
+        <label class="field-label">お薬の名前 <span class="required">*</span></label>
+        <input type="text" id="med-name" class="field-input" placeholder="例: フィラリア予防薬、抗生物質">
+        <label class="field-label">用法の目安 (1日の回数など)</label>
+        <input type="text" id="med-usage" class="field-input" placeholder="例: 1日2回 朝晩、月1回">
+        <label class="field-label">お薬の詳細メモ・効果 (詳細表示用)</label>
+        <textarea id="med-memo" class="field-input" rows="4" placeholder="例: 毎日のご飯に混ぜて与える。フィラリアとノミダニの予防効果。"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal(null,'modal-medicine')">キャンセル</button>
+        <button class="btn-primary" onclick="saveMedicineRecord()">登録する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル：お薬の詳細確認 -->
+  <div id="modal-medicine-detail" class="modal-overlay" onclick="closeModal(event,'modal-medicine-detail')">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="med-detail-title">お薬の詳細</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-medicine-detail')">✕</button>
+      </div>
+      <div class="modal-body" style="padding-bottom:18px;">
+        <div class="detail-card" style="margin-bottom:0; box-shadow: none; border: none; padding: 0; background: transparent;">
+          <div class="detail-field">
+            <label class="field-label">お薬名</label>
+            <div class="field-value" id="med-detail-name" style="font-size:18px;font-weight:700;color:var(--accent);margin-top:2px;"></div>
+          </div>
+          <div class="detail-field">
+            <label class="field-label">用法の目安</label>
+            <div class="field-value" id="med-detail-usage" style="font-size:14px;font-weight:600;color:var(--text-dark);margin-top:2px;"></div>
+          </div>
+          <div class="detail-field">
+            <label class="field-label">詳細メモ・効能</label>
+            <div class="memo-view" id="med-detail-memo" style="font-size:13px;line-height:1.6;background:var(--cream);padding:10px;border-radius:10px;white-space:pre-wrap;margin-top:2px;color:var(--text-mid);"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding-top:0;">
+        <button class="btn-cancel" style="flex:1" onclick="closeModal(null,'modal-medicine-detail')">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル：病院の共有方法選択（ハーフシート風） -->
+  <div id="modal-share-sheet" class="modal-overlay" onclick="closeModal(event,'modal-share-sheet')">
+    <div class="modal-box modal-box-small" style="border-radius:24px 24px 0 0; margin-bottom: 0; width: 100%; max-width: 480px; position: absolute; bottom: 0;">
+      <div class="modal-header">
+        <h3 class="modal-title">病院情報の共有</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-share-sheet')">✕</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;padding-bottom:24px;padding-top:8px;">
+        <input type="hidden" id="share-hospital-id">
+        <button class="btn-transfer import" onclick="executeSystemShare()" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;font-size:14px;font-weight:700;border-radius:12px;background:#f5ede0;color:var(--text-dark);border:1px solid rgba(44,36,24,0.15);">
+          <span>📢</span> 外部アプリで共有 (AirDrop/LINE等)
+        </button>
+        <button class="btn-transfer export" onclick="executeTextCopyShare()" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;font-size:14px;font-weight:700;border-radius:12px;background:#96a28e;color:white;border:none;">
+          <span>📋</span> コピペ（情報をクリップボードに保存）
+        </button>
       </div>
     </div>
   </div>

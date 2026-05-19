@@ -869,6 +869,13 @@ function ensurePetHospitalFields(pet) {
   if (!pet.hospitals) pet.hospitals = [];
   if (!pet.medicalRecords) pet.medicalRecords = [];
   if (!pet.certificates) pet.certificates = {};
+  if (!pet.medicines) pet.medicines = [];
+  if (!pet.medicineLogs) pet.medicineLogs = {};
+  
+  pet.hospitals.forEach(h => {
+    if (!h.priceList) h.priceList = [];
+  });
+  
   return pet;
 }
 

@@ -244,17 +244,24 @@ a, button {
   background: var(--white);
   border-bottom: 1px solid rgba(44,36,24,0.08);
   flex-shrink: 0;
-  padding: 4px 6px;
+  padding: 6px 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  gap: 8px;
+}
+.hospital-tabs::-webkit-scrollbar {
+  display: none; /* スクロールバー非表示 */
 }
 .hospital-tab-btn {
-  flex: 1;
+  flex: 0 0 auto; /* 幅を固定して縮まないようにする */
   border: none;
   background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 8px 0;
+  padding: 8px 14px;
   cursor: pointer;
   border-radius: 12px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -979,4 +986,202 @@ a, button {
 }
 .detail-hospital-records-btn-new:active {
   transform: scale(0.96);
+}
+
+/* ==========================================
+   ===== 6. お薬管理・服用チェック (CSS) =====
+   ========================================== */
+.medicine-care-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+.med-care-btn {
+  background: var(--white);
+  border: 1.5px solid rgba(44,36,24,0.08);
+  border-radius: 14px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.2s;
+  min-height: 72px;
+  position: relative;
+  text-align: left;
+}
+.med-care-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+.med-care-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.med-care-usage {
+  font-size: 10px;
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.med-care-counter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-top: 4px;
+}
+.med-care-status {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 20px;
+  background: rgba(44,36,24,0.06);
+  color: var(--text-light);
+}
+.med-care-btn.taken {
+  background: #eef9f2;
+  border-color: #a3e0be;
+}
+.med-care-btn.taken .med-care-status {
+  background: #4caf80;
+  color: white;
+}
+.med-care-dec-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: rgba(224,80,80,0.1);
+  color: var(--red);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+.med-care-dec-btn:active {
+  transform: scale(0.9);
+}
+
+/* お薬マスター管理タブ */
+.medicine-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.medicine-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  border: 1px solid rgba(44,36,24,0.05);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.medicine-card-info {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.medicine-card-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-dark);
+  margin-bottom: 2px;
+}
+.medicine-card-usage {
+  font-size: 12px;
+  color: var(--text-light);
+}
+.medicine-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.med-sort-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: var(--warm);
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-mid);
+}
+.med-del-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(224,80,80,0.08);
+  border-radius: 50%;
+  color: var(--red);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 病院登録時の料金表エディター行 */
+.hospital-price-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.price-row-name {
+  flex: 3;
+}
+.price-row-val {
+  flex: 2;
+}
+
+/* 病院詳細の料金表閲覧用テーブル */
+.hospital-price-table-wrap {
+  margin-top: 10px;
+  border: 1px solid rgba(44,36,24,0.06);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--white);
+}
+.hospital-price-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.hospital-price-table th {
+  background: var(--warm);
+  padding: 8px 10px;
+  font-weight: 800;
+  text-align: left;
+  border-bottom: 1px solid rgba(44,36,24,0.08);
+}
+.hospital-price-table td {
+  padding: 8px 10px;
+  border-bottom: 1px dashed rgba(44,36,24,0.05);
+}
+.hospital-price-table tr:last-child td {
+  border-bottom: none;
+}
+.hospital-price-table td.val {
+  text-align: right;
+  font-weight: 700;
+  color: var(--accent);
 }
