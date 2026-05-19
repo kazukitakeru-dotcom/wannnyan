@@ -1577,6 +1577,34 @@ function executeSystemShare() {
   }
 }
 
+function fallbackCopyTextToClipboard(text) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  
+  textArea.style.top = "0";
+  textArea.style.left = "0";
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+  
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  
+  try {
+    const successful = document.execCommand('copy');
+    if (successful) {
+      closeModal(null, 'modal-share-sheet');
+      showToast('病院情報をコピーしました！LINE等に貼り付けられます ✓');
+    } else {
+      alert('コピーに失敗しました。お手数ですが手動でコピーしてください。');
+    }
+  } catch (err) {
+    alert('コピーに失敗しました。お手数ですが手動でコピーしてください。');
+  }
+  
+  document.body.removeChild(textArea);
+}
+
 function executeTextCopyShare() {
   if (!currentShareHospitalId) return;
   
@@ -1589,12 +1617,16 @@ function executeTextCopyShare() {
   
   const text = generateHospitalShareText(hosp);
   
-  navigator.clipboard.writeText(text).then(() => {
-    closeModal(null, 'modal-share-sheet');
-    showToast('病院情報をコピーしました！LINE等に貼り付けられます ✓');
-  }).catch(() => {
-    alert('コピーに失敗しました。お手数ですが手動でコピーしてください。');
-  });
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      closeModal(null, 'modal-share-sheet');
+      showToast('病院情報をコピーしました！LINE等に貼り付けられます ✓');
+    }).catch(() => {
+      fallbackCopyTextToClipboard(text);
+    });
+  } else {
+    fallbackCopyTextToClipboard(text);
+  }
 }
 
 // ==========================================
@@ -2475,10 +2507,10 @@ function renderMedicineCareSection() {
   // 対象日の服用ログを取得
   const dayLogs = pet.medicineLogs[dateStr] || {};
   
-  container.innerHTML = activeMedicines.map(med => {
+  container.innerHTML = activeMedicines.map((med, index) => {
     const count = dayLogs[med.id] || 0;
     return `
-      <div class="med-care-item">
+      <div class="med-care-item" style="position: relative;">
         <button class="med-care-btn ${count > 0 ? 'completed' : ''}" onclick="showMedicineDetailModal('${med.id}')">
           <div class="med-care-icon">💊</div>
           <div class="med-care-name">${escHtml(med.name)}</div>
@@ -2488,6 +2520,10 @@ function renderMedicineCareSection() {
         <div class="med-care-actions">
           <button class="med-care-act-btn plus" onclick="changeMedicineCount('${med.id}', 1, event)" title="1回分追加">＋</button>
           ${count > 0 ? `<button class="med-care-act-btn minus" onclick="changeMedicineCount('${med.id}', -1, event)" title="1回分取り消し">ー</button>` : ''}
+        </div>
+        <div class="med-care-order-btns" style="position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 2px; z-index: 10;">
+          <button class="med-care-order-btn" onclick="event.stopPropagation(); moveMedicineOrder('${med.id}', -1, true)" ${index === 0 ? 'disabled' : ''} style="border: none; background: rgba(44,36,24,0.06); color: var(--text-dark); border-radius: 4px; padding: 2px; font-size: 8px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: ${index === 0 ? 0.3 : 1};" title="上に移動">▲</button>
+          <button class="med-care-order-btn" onclick="event.stopPropagation(); moveMedicineOrder('${med.id}', 1, true)" ${index === activeMedicines.length - 1 ? 'disabled' : ''} style="border: none; background: rgba(44,36,24,0.06); color: var(--text-dark); border-radius: 4px; padding: 2px; font-size: 8px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: ${index === activeMedicines.length - 1 ? 0.3 : 1};" title="下に移動">▼</button>
         </div>
       </div>
     `;
@@ -2612,7 +2648,7 @@ function renderMedicineListMaster() {
   
   ensurePetHospitalFields(pet);
   
-  const container = document.getElementById('medicine-master-list');
+  const container = document.getElementById('medicine-list-container');
   if (!container) return;
   
   if (pet.medicines.length === 0) {
@@ -2819,23 +2855,47 @@ function deleteMedicineMaster(medId) {
 }
 
 // お薬マスタの並び替え (▲▼ボタン)
-function moveMedicineOrder(medId, direction) {
+function moveMedicineOrder(medId, direction, isFromCare = false) {
   const data = loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
   
   const pet = ensurePetHospitalFields(pets[idx]);
-  const mIdx = pet.medicines.findIndex(m => m.id === medId);
-  if (mIdx === -1) return;
   
-  const targetIdx = mIdx + direction;
-  if (targetIdx < 0 || targetIdx >= pet.medicines.length) return;
-  
-  // 要素の入れ替え
-  const temp = pet.medicines[mIdx];
-  pet.medicines[mIdx] = pet.medicines[targetIdx];
-  pet.medicines[targetIdx] = temp;
+  if (isFromCare) {
+    // 日常ケア（服用中のみ）からの並び替え
+    const activeMedicines = pet.medicines.filter(m => (m.status || 'active') === 'active');
+    const activeIdx = activeMedicines.findIndex(m => m.id === medId);
+    if (activeIdx === -1) return;
+    
+    const activeTargetIdx = activeIdx + direction;
+    if (activeTargetIdx < 0 || activeTargetIdx >= activeMedicines.length) return;
+    
+    const currentMed = activeMedicines[activeIdx];
+    const targetMed = activeMedicines[activeTargetIdx];
+    
+    // 全体配列の中での位置を見つける
+    const mIdx = pet.medicines.findIndex(m => m.id === currentMed.id);
+    const targetIdx = pet.medicines.findIndex(m => m.id === targetMed.id);
+    
+    if (mIdx !== -1 && targetIdx !== -1) {
+      const temp = pet.medicines[mIdx];
+      pet.medicines[mIdx] = pet.medicines[targetIdx];
+      pet.medicines[targetIdx] = temp;
+    }
+  } else {
+    // お薬マスタ（全体一覧）からの並び替え
+    const mIdx = pet.medicines.findIndex(m => m.id === medId);
+    if (mIdx === -1) return;
+    
+    const targetIdx = mIdx + direction;
+    if (targetIdx < 0 || targetIdx >= pet.medicines.length) return;
+    
+    const temp = pet.medicines[mIdx];
+    pet.medicines[mIdx] = pet.medicines[targetIdx];
+    pet.medicines[targetIdx] = temp;
+  }
   
   pets[idx] = pet;
   data[currentType] = pets;

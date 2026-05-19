@@ -280,6 +280,27 @@
             <!-- 履歴リスト -->
           </div>
         </div>
+
+        <!-- 日常ケアカレンダー -->
+        <div class="detail-card" style="margin-top: 14px;">
+          <div class="detail-card-title" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>🗓️ 日常ケアカレンダー</span>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <button onclick="changeCareCalendarMonth(-1)" style="border:none; background:rgba(44,36,24,0.06); border-radius:4px; padding:4px 8px; cursor:pointer; font-size:12px; font-weight:bold; color:var(--text-dark);">＜</button>
+              <span id="care-calendar-month-label" style="font-size:13px; font-weight:700; color:var(--text-dark);">2026年5月</span>
+              <button onclick="changeCareCalendarMonth(1)" style="border:none; background:rgba(44,36,24,0.06); border-radius:4px; padding:4px 8px; cursor:pointer; font-size:12px; font-weight:bold; color:var(--text-dark);">＞</button>
+            </div>
+          </div>
+          <div id="care-calendar-container" style="margin-top:10px;">
+            <!-- JSで動的カレンダーを描画 -->
+          </div>
+          <div class="care-legend" style="display:flex; gap:12px; flex-wrap:wrap; font-size:10.5px; font-weight:700; color:var(--text-light); margin-top:10px; border-top:1px dashed rgba(44,36,24,0.1); padding-top:8px; justify-content:center;">
+            <span>💅 爪切り</span>
+            <span>🪥 歯磨き</span>
+            <span>🛡️ ノミダニ</span>
+            <span>💊 お薬</span>
+          </div>
+        </div>
       </div>
 
       <!-- 2. 通院履歴タブ -->
