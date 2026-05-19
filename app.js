@@ -918,6 +918,8 @@ function openHospitalRecords(petId) {
   renderMedicalTimeline();
   renderHospitalMaster();
   renderCertificates();
+  renderMedicineCareSection();
+  renderMedicineListMaster();
 }
 
 // 統合画面からペット詳細画面に戻る
@@ -958,12 +960,18 @@ function switchHospitalTab(tabId) {
   // タブに応じた個別処理
   if (tabId === 'care-weight') {
     drawWeightGraph();
+    renderQuickCares();
+    renderMedicineCareSection();
+  } else if (tabId === 'medicine-tab') {
+    renderMedicineListMaster();
   }
 }
 
-// ==========================================
-// 1. 日常ケア (1タップクイック完了) のロジック
-// ==========================================
+function onQuickCareDateChange() {
+  renderQuickCares();
+  renderMedicineCareSection();
+}
+
 function renderQuickCares() {
   const data = loadData();
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
@@ -1319,6 +1327,20 @@ function renderHospitalMaster() {
             <p class="issue-memo-label">特色・印象（病院メモ）</p>
             <div class="hospital-memo-box">${escHtml(hosp.memo)}</div>` : ''}
             
+          <!-- 料金表セクション -->
+          ${hosp.priceList && hosp.priceList.length > 0 ? `
+            <div class="hospital-price-list-wrap">
+              <p class="issue-memo-label">🩺 主な治療・検査の料金目安</p>
+              <table class="hospital-price-table">
+                <thead>
+                  <tr><th>治療・ケア項目</th><th>目安料金</th></tr>
+                </thead>
+                <tbody>
+                  ${hosp.priceList.map(p => `<tr><td>${escHtml(p.name)}</td><td><strong>${Number(p.price).toLocaleString()}</strong> 円</td></tr>`).join('')}
+                </tbody>
+              </table>
+            </div>` : ''}
+             
           <!-- 逆引き治療履歴セクション -->
           <div class="hospital-reverse-records">
             <div class="hospital-rev-title">🏥 治療実績とクチコミ（逆引き一覧）</div>
@@ -1355,6 +1377,10 @@ function openHospitalModal(hospitalId = null) {
   document.getElementById('h-doctor').value = '';
   document.getElementById('h-memo').value = '';
   
+  // 料金エディタコンテナを初期クリア
+  const editor = document.getElementById('hospital-price-editor');
+  if (editor) editor.innerHTML = '';
+  
   if (hospitalId) {
     document.getElementById('hospital-modal-title').textContent = '病院情報を編集';
     const data = loadData();
@@ -1367,13 +1393,43 @@ function openHospitalModal(hospitalId = null) {
         document.getElementById('h-address').value = hosp.address || '';
         document.getElementById('h-doctor').value = hosp.doctor || '';
         document.getElementById('h-memo').value = hosp.memo || '';
+        
+        // 既存料金表の展開
+        if (hosp.priceList && hosp.priceList.length > 0) {
+          hosp.priceList.forEach(p => addPriceEditRow(p.name, p.price));
+        }
       }
     }
   } else {
     document.getElementById('hospital-modal-title').textContent = '病院を新規登録';
+    // デフォルトで3つの料金行を用意
+    addPriceEditRow('爪切り', '');
+    addPriceEditRow('ノミ・ダニ予防', '');
+    addPriceEditRow('混合ワクチン予防接種', '');
   }
   
   document.getElementById('modal-hospital').classList.add('open');
+}
+
+function addPriceEditRow(name = '', price = '') {
+  const container = document.getElementById('hospital-price-editor');
+  if (!container) return;
+  
+  const rowId = 'price_row_' + Math.random().toString(36).substr(2, 9);
+  const row = document.createElement('div');
+  row.className = 'hospital-price-row';
+  row.id = rowId;
+  row.innerHTML = `
+    <input type="text" class="h-price-name" placeholder="例: 爪切り, 5種混合" value="${escHtml(name)}">
+    <input type="number" class="h-price-val" placeholder="料金(円)" value="${price}">
+    <button type="button" class="h-price-del-btn" onclick="removePriceEditRow('${rowId}')">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function removePriceEditRow(rowId) {
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
 }
 
 function saveHospitalRecord() {
@@ -1391,13 +1447,28 @@ function saveHospitalRecord() {
   const pet = ensurePetHospitalFields(pets[idx]);
   const id = document.getElementById('edit-hospital-id').value;
   
+  // 料金エディタ行からデータを収集
+  const priceList = [];
+  const rows = document.querySelectorAll('#hospital-price-editor .hospital-price-row');
+  rows.forEach(row => {
+    const pName = row.querySelector('.h-price-name').value.trim();
+    const pPrice = row.querySelector('.h-price-val').value.trim();
+    if (pName && pPrice) {
+      priceList.push({
+        name: pName,
+        price: Number(pPrice)
+      });
+    }
+  });
+  
   const hospData = {
     id: id || 'hosp_' + Date.now(),
     name,
     phone: document.getElementById('h-phone').value.trim(),
     address: document.getElementById('h-address').value.trim(),
     doctor: document.getElementById('h-doctor').value.trim(),
-    memo: document.getElementById('h-memo').value.trim()
+    memo: document.getElementById('h-memo').value.trim(),
+    priceList
   };
   
   if (id) {
@@ -1436,16 +1507,8 @@ function deleteHospitalRecord(hospitalId) {
   showToast('病院を削除しました');
 }
 
-// ワンタップシェア機能 (病院情報をテキストコピー)
-function shareHospital(hospitalId) {
-  const data = loadData();
-  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
-  if (!pet) return;
-  
-  const hosp = pet.hospitals.find(h => h.id === hospitalId);
-  if (!hosp) return;
-  
-  // テキストの組み立て
+// 共有用テキスト自動生成ヘルパー
+function generateHospitalShareText(hosp) {
   let shareText = `【おすすめの動物病院】\n`;
   shareText += `🏥 病院名: ${hosp.name}\n`;
   if (hosp.phone) shareText += `📞 電話: ${hosp.phone}\n`;
@@ -1455,9 +1518,79 @@ function shareHospital(hospitalId) {
   }
   if (hosp.doctor) shareText += `👨‍⚕️ 担当医: ${hosp.doctor}\n`;
   if (hosp.memo) shareText += `📝 メモ: ${hosp.memo}\n`;
-  shareText += `\n（わんにゃんメモリー より共有）`;
   
-  navigator.clipboard.writeText(shareText).then(() => {
+  if (hosp.priceList && hosp.priceList.length > 0) {
+    shareText += `\n🩺 主な治療・検査の料金目安:\n`;
+    hosp.priceList.forEach(p => {
+      shareText += ` ・ ${p.name}: ${Number(p.price).toLocaleString()}円\n`;
+    });
+  }
+  
+  shareText += `\n（わんにゃんメモリー より共有）`;
+  return shareText;
+}
+
+// ワンタップシェア機能 (共有モーダル起動)
+let currentShareHospitalId = null;
+
+function shareHospital(hospitalId) {
+  currentShareHospitalId = hospitalId;
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  const hosp = pet.hospitals.find(h => h.id === hospitalId);
+  if (!hosp) return;
+  
+  document.getElementById('share-hosp-name').textContent = hosp.name;
+  document.getElementById('modal-share-sheet').classList.add('open');
+}
+
+function executeSystemShare() {
+  if (!currentShareHospitalId) return;
+  
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  const hosp = pet.hospitals.find(h => h.id === currentShareHospitalId);
+  if (!hosp) return;
+  
+  const text = generateHospitalShareText(hosp);
+  
+  if (navigator.share) {
+    navigator.share({
+      title: `${hosp.name} の紹介`,
+      text: text
+    }).then(() => {
+      closeModal(null, 'modal-share-sheet');
+      showToast('共有しました ✓');
+    }).catch(err => {
+      // ユーザーによるキャンセル（AbortError）以外の場合はコピーへフォールバック
+      if (err && err.name !== 'AbortError') {
+        executeTextCopyShare();
+      }
+    });
+  } else {
+    // navigator.share が使えないPC環境などの場合はコピペ（クリップボード保存）を自動的に実行
+    executeTextCopyShare();
+  }
+}
+
+function executeTextCopyShare() {
+  if (!currentShareHospitalId) return;
+  
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  const hosp = pet.hospitals.find(h => h.id === currentShareHospitalId);
+  if (!hosp) return;
+  
+  const text = generateHospitalShareText(hosp);
+  
+  navigator.clipboard.writeText(text).then(() => {
+    closeModal(null, 'modal-share-sheet');
     showToast('病院情報をコピーしました！LINE等に貼り付けられます ✓');
   }).catch(() => {
     alert('コピーに失敗しました。お手数ですが手動でコピーしてください。');
@@ -1543,7 +1676,23 @@ function renderMedicalTimeline() {
               ${rec.cost ? `<span class="timeline-item-cost">${Number(rec.cost).toLocaleString()} 円</span>` : ''}
             </div>
             ${rec.doctor ? `<div class="timeline-item-meta">担当医：${escHtml(rec.doctor)}</div>` : ''}
-            ${rec.notes ? `<div class="timeline-item-notes">${escHtml(rec.notes)}</div>` : ''}
+            
+            ${rec.vaccineName ? `
+              <div class="vaccine-info-pill" style="margin-top:6px; display:inline-block; background:rgba(200, 132, 74, 0.08); padding:4px 8px; border-radius:8px; font-size:12px; font-weight:700; color:var(--accent)">
+                🛡️ 接種・検査：${escHtml(rec.vaccineName)}
+              </div>` : ''}
+            
+            ${rec.antibodyVals ? `
+              <div class="antibody-vals-box" style="margin-top:6px; background:var(--cream); padding:8px 12px; border-radius:8px; font-size:12px; border:1px solid rgba(44,36,24,0.05)">
+                <p style="margin:0 0 4px 0; font-weight:700; color:var(--text-dark)">🔬 主要3種抗体価結果：</p>
+                <div style="display:flex; gap:12px; font-weight:700; color:var(--text-mid)">
+                  <span>${currentType === 'dog' ? 'CDV' : 'FCV'}: <strong style="color:var(--accent)">${escHtml(rec.antibodyVals.val1 || '-')}</strong></span>
+                  <span>${currentType === 'dog' ? 'CAV' : 'FHV'}: <strong style="color:var(--accent)">${escHtml(rec.antibodyVals.val2 || '-')}</strong></span>
+                  <span>${currentType === 'dog' ? 'CPV' : 'FPV'}: <strong style="color:var(--accent)">${escHtml(rec.antibodyVals.val3 || '-')}</strong></span>
+                </div>
+              </div>` : ''}
+            
+            ${rec.notes ? `<div class="timeline-item-notes" style="margin-top:6px;">${escHtml(rec.notes)}</div>` : ''}
             ${rec.photo ? `<img class="timeline-item-photo" src="${rec.photo}" alt="領収書・明細書" onclick="window.open('${rec.photo}','_blank')">` : ''}
             
             <div class="timeline-item-actions">
@@ -1592,11 +1741,63 @@ function openMedicalRecordModal(recordId = null) {
   document.getElementById('m-doctor').value = '';
   document.getElementById('m-cost').value = '';
   document.getElementById('m-notes').value = '';
+  document.getElementById('m-weight').value = '';
+  document.getElementById('m-care-nail').checked = false;
+  document.getElementById('m-care-tooth').checked = false;
+  document.getElementById('m-care-flea').checked = false;
   document.getElementById('m-photo-preview').src = '';
   document.getElementById('m-photo-preview').classList.add('hidden');
   document.getElementById('m-photo-placeholder').classList.remove('hidden');
   tempMedicalPhoto = null;
-  
+
+  // ワクチン・抗体価詳細エリアの初期クリア
+  document.getElementById('m-vaccine-select').innerHTML = '';
+  document.getElementById('m-vaccine-custom').value = '';
+  document.getElementById('m-vaccine-custom-wrap').style.display = 'none';
+  document.getElementById('m-ab-val1').value = '';
+  document.getElementById('m-ab-val2').value = '';
+  document.getElementById('m-ab-val3').value = '';
+  document.getElementById('m-antibody-area').style.display = 'none';
+
+  // 犬猫に応じたラベル名切り替え
+  if (currentType === 'dog') {
+    document.getElementById('m-ab-lbl1').textContent = 'CDV (ジステンパー):';
+    document.getElementById('m-ab-lbl2').textContent = 'CAV (アデノ):';
+    document.getElementById('m-ab-lbl3').textContent = 'CPV (パルボ):';
+  } else {
+    document.getElementById('m-ab-lbl1').textContent = 'FCV (カリシ):';
+    document.getElementById('m-ab-lbl2').textContent = 'FHV (ヘルペス):';
+    document.getElementById('m-ab-lbl3').textContent = 'FPV (パルボ):';
+  }
+
+  // 犬猫に応じたワクチンセレクトオプション構築
+  const vSelect = document.getElementById('m-vaccine-select');
+  let vOptions = [];
+  if (currentType === 'dog') {
+    vOptions = [
+      { value: '', text: '-- 選択してください --' },
+      { value: '狂犬病予防注射', text: '狂犬病予防注射' },
+      { value: '5種混合ワクチン', text: '5種混合ワクチン' },
+      { value: '6種混合ワクチン', text: '6種混合ワクチン' },
+      { value: '7種混合ワクチン', text: '7種混合ワクチン' },
+      { value: '8種混合ワクチン', text: '8種混合ワクチン' },
+      { value: '9種混合ワクチン', text: '9種混合ワクチン' },
+      { value: '10種混合ワクチン', text: '10種混合ワクチン' },
+      { value: '抗体価検査済', text: '抗体価検査済' },
+      { value: 'custom', text: 'その他（自由記入）' }
+    ];
+  } else {
+    vOptions = [
+      { value: '', text: '-- 選択してください --' },
+      { value: '3種混合ワクチン', text: '3種混合ワクチン' },
+      { value: '4種混合ワクチン', text: '4種混合ワクチン' },
+      { value: '5種混合ワクチン', text: '5種混合ワクチン' },
+      { value: '抗体価検査済', text: '抗体価検査済' },
+      { value: 'custom', text: 'その他（自由記入）' }
+    ];
+  }
+  vSelect.innerHTML = vOptions.map(opt => `<option value="${opt.value}">${opt.text}</option>`).join('');
+
   selectMedicalType('medical');
   
   if (recordId) {
@@ -1609,6 +1810,31 @@ function openMedicalRecordModal(recordId = null) {
       document.getElementById('m-doctor').value = rec.doctor || '';
       document.getElementById('m-cost').value = rec.cost || '';
       document.getElementById('m-notes').value = rec.notes || '';
+      document.getElementById('m-weight').value = rec.weight || '';
+      if (rec.cares) {
+        document.getElementById('m-care-nail').checked = !!rec.cares.nail;
+        document.getElementById('m-care-tooth').checked = !!rec.cares.tooth;
+        document.getElementById('m-care-flea').checked = !!rec.cares.flea;
+      }
+      
+      // ワクチン情報の復元
+      if (rec.type === 'vaccine') {
+        const hasPreset = vOptions.some(opt => opt.value === rec.vaccineName);
+        if (hasPreset && rec.vaccineName !== '') {
+          vSelect.value = rec.vaccineName;
+        } else if (rec.vaccineName) {
+          vSelect.value = 'custom';
+          document.getElementById('m-vaccine-custom').value = rec.vaccineName;
+          document.getElementById('m-vaccine-custom-wrap').style.display = 'block';
+        }
+        
+        if (rec.vaccineName === '抗体価検査済' && rec.antibodyVals) {
+          document.getElementById('m-antibody-area').style.display = 'block';
+          document.getElementById('m-ab-val1').value = rec.antibodyVals.val1 || '';
+          document.getElementById('m-ab-val2').value = rec.antibodyVals.val2 || '';
+          document.getElementById('m-ab-val3').value = rec.antibodyVals.val3 || '';
+        }
+      }
       
       if (rec.photo) {
         tempMedicalPhoto = rec.photo;
@@ -1642,6 +1868,29 @@ function selectMedicalType(type) {
   document.getElementById('m-type').value = type;
   document.getElementById('m-type-medical').classList.toggle('selected', type === 'medical');
   document.getElementById('m-type-vaccine').classList.toggle('selected', type === 'vaccine');
+
+  // タイプがワクチン・予防の場合のみワクチン記入セクションを表示
+  const vacArea = document.getElementById('m-vaccine-area');
+  if (vacArea) vacArea.style.display = type === 'vaccine' ? 'block' : 'none';
+}
+
+function onMedicalVaccineSelectChange() {
+  const select = document.getElementById('m-vaccine-select');
+  const customWrap = document.getElementById('m-vaccine-custom-wrap');
+  const abArea = document.getElementById('m-antibody-area');
+  
+  if (select) {
+    if (select.value === 'custom') {
+      if (customWrap) customWrap.style.display = 'block';
+      if (abArea) abArea.style.display = 'none';
+    } else if (select.value === '抗体価検査済') {
+      if (customWrap) customWrap.style.display = 'none';
+      if (abArea) abArea.style.display = 'block';
+    } else {
+      if (customWrap) customWrap.style.display = 'none';
+      if (abArea) abArea.style.display = 'none';
+    }
+  }
 }
 
 // 病院を変更した際に、病院マスターから担当医(何先生)を自動プレフィルする
@@ -1689,15 +1938,45 @@ function saveMedicalRecord() {
   const pet = ensurePetHospitalFields(pets[idx]);
   const id = document.getElementById('edit-medical-id').value;
   
+  const recWeight = document.getElementById('m-weight').value.trim();
+  const nailChecked = document.getElementById('m-care-nail').checked;
+  const toothChecked = document.getElementById('m-care-tooth').checked;
+  const fleaChecked = document.getElementById('m-care-flea').checked;
+
+  const recType = document.getElementById('m-type').value;
+  let vaccineName = '';
+  let antibodyVals = null;
+
+  if (recType === 'vaccine') {
+    const vSelectVal = document.getElementById('m-vaccine-select').value;
+    if (vSelectVal === 'custom') {
+      vaccineName = document.getElementById('m-vaccine-custom').value.trim();
+    } else {
+      vaccineName = vSelectVal;
+    }
+    
+    if (vSelectVal === '抗体価検査済') {
+      antibodyVals = {
+        val1: document.getElementById('m-ab-val1').value.trim(),
+        val2: document.getElementById('m-ab-val2').value.trim(),
+        val3: document.getElementById('m-ab-val3').value.trim()
+      };
+    }
+  }
+
   const recData = {
     id: id || 'med_' + Date.now(),
     date,
-    type: document.getElementById('m-type').value,
+    type: recType,
     hospitalId,
     doctor: document.getElementById('m-doctor').value.trim(),
     cost: document.getElementById('m-cost').value ? Number(document.getElementById('m-cost').value) : '',
     notes: document.getElementById('m-notes').value.trim(),
-    photo: tempMedicalPhoto || null
+    photo: tempMedicalPhoto || null,
+    weight: recWeight ? Number(recWeight) : '',
+    cares: { nail: nailChecked, tooth: toothChecked, flea: fleaChecked },
+    vaccineName,
+    antibodyVals
   };
   
   if (id) {
@@ -1705,6 +1984,37 @@ function saveMedicalRecord() {
     if (rIdx !== -1) pet.medicalRecords[rIdx] = recData;
   } else {
     pet.medicalRecords.push(recData);
+  }
+
+  // 体重データの自動同期登録
+  if (recWeight) {
+    const wVal = Number(recWeight);
+    const existingWIdx = pet.weightHistory.findIndex(w => w.date === date);
+    if (existingWIdx !== -1) {
+      pet.weightHistory[existingWIdx].weight = wVal;
+    } else {
+      pet.weightHistory.push({
+        id: 'w_' + Date.now(),
+        date,
+        weight: wVal
+      });
+    }
+    
+    // 基本プロフィールの体重情報も最新日に連動
+    const sortedHistory = [...pet.weightHistory].sort((a,b) => b.date.localeCompare(a.date));
+    if (sortedHistory.length > 0) {
+      pet.weight = String(sortedHistory[0].weight);
+    }
+  }
+
+  // 日常ケア（爪切り、歯磨き、ノミダニ）の自動完了同期
+  if (nailChecked || toothChecked || fleaChecked) {
+    if (!pet.quickCares[date]) {
+      pet.quickCares[date] = {};
+    }
+    if (nailChecked) pet.quickCares[date].nail = true;
+    if (toothChecked) pet.quickCares[date].tooth = true;
+    if (fleaChecked) pet.quickCares[date].flea = true;
   }
   
   pets[idx] = pet;
@@ -1714,6 +2024,8 @@ function saveMedicalRecord() {
   closeModal(null, 'modal-medical-record');
   renderMedicalTimeline();
   renderHospitalMaster(); // 逆引き一覧の再更新用
+  renderQuickCares();     // 同期した日常ケアの即時反映
+  renderWeightSection();  // 体重グラフ等の即時反映
   showToast(id ? '記録を更新しました ✓' : '通院記録を保存しました ✓');
 }
 
@@ -1793,7 +2105,20 @@ function renderCertificates() {
     }
     
     if (c.key === 'antibody') {
-      detailRows.push(`<div class="cert-detail-row"><span class="cert-detail-lbl">検査結果</span><span class="cert-detail-val">${escHtml(hasData ? c.data.result : '-')}</span></div>`);
+      const typeAb1 = currentType === 'dog' ? 'CDV' : 'FCV';
+      const typeAb2 = currentType === 'dog' ? 'CAV' : 'FHV';
+      const typeAb3 = currentType === 'dog' ? 'CPV' : 'FPV';
+      
+      detailRows.push(`
+        <div class="cert-detail-row" style="flex-direction:column; align-items:flex-start; gap:4px; border-bottom:none;">
+          <span class="cert-detail-lbl">主要3種抗体価結果</span>
+          <div style="display:flex; gap:16px; font-size:12px; font-weight:700; color:var(--text-mid); margin-top:2px;">
+            <span>${typeAb1}: <strong style="color:var(--accent)">${escHtml(hasData && c.data.abVal1 ? c.data.abVal1 : '-')}</strong></span>
+            <span>${typeAb2}: <strong style="color:var(--accent)">${escHtml(hasData && c.data.abVal2 ? c.data.abVal2 : '-')}</strong></span>
+            <span>${typeAb3}: <strong style="color:var(--accent)">${escHtml(hasData && c.data.abVal3 ? c.data.abVal3 : '-')}</strong></span>
+          </div>
+        </div>
+      `);
     }
     
     const photoHtml = (hasData && c.data.photo)
@@ -1837,11 +2162,59 @@ function openCertificateModal(certKey) {
   // デフォルト値の初期化
   document.getElementById('c-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('c-name').value = '';
-  document.getElementById('c-result').value = '';
+  document.getElementById('c-ab-val1').value = '';
+  document.getElementById('c-ab-val2').value = '';
+  document.getElementById('c-ab-val3').value = '';
   document.getElementById('c-photo-preview').src = '';
   document.getElementById('c-photo-preview').classList.add('hidden');
   document.getElementById('c-photo-placeholder').classList.remove('hidden');
   tempCertPhoto = null;
+
+  // 犬猫に応じたラベル名切り替え
+  if (currentType === 'dog') {
+    document.getElementById('c-ab-lbl1').textContent = 'CDV (ジステンパー):';
+    document.getElementById('c-ab-lbl2').textContent = 'CAV (アデノ):';
+    document.getElementById('c-ab-lbl3').textContent = 'CPV (パルボ):';
+  } else {
+    document.getElementById('c-ab-lbl1').textContent = 'FCV (カリシ):';
+    document.getElementById('c-ab-lbl2').textContent = 'FHV (ヘルペス):';
+    document.getElementById('c-ab-lbl3').textContent = 'FPV (パルボ):';
+  }
+  
+  // セレクトボックスの犬猫別オプション構築
+  const select = document.getElementById('c-name-select');
+  if (select) {
+    let options = [];
+    if (currentType === 'dog') {
+      options = [
+        { value: '', text: '-- 選択してください --' },
+        { value: '狂犬病予防ワクチン', text: '狂犬病予防ワクチン' },
+        { value: '5種混合ワクチン', text: '5種混合ワクチン' },
+        { value: '6種混合ワクチン', text: '6種混合ワクチン' },
+        { value: '7種混合ワクチン', text: '7種混合ワクチン' },
+        { value: '8種混合ワクチン', text: '8種混合ワクチン' },
+        { value: '9種混合ワクチン', text: '9種混合ワクチン' },
+        { value: '10種混合ワクチン', text: '10種混合ワクチン' },
+        { value: '抗体価検査済', text: '抗体価検査済' },
+        { value: 'custom', text: 'その他の薬・ワクチン（自由記入）' }
+      ];
+    } else {
+      // 猫の場合
+      options = [
+        { value: '', text: '-- 選択してください --' },
+        { value: '3種混合ワクチン', text: '3種混合ワクチン' },
+        { value: '4種混合ワクチン', text: '4種混合ワクチン' },
+        { value: '5種混合ワクチン', text: '5種混合ワクチン' },
+        { value: '抗体価検査済', text: '抗体価検査済' },
+        { value: 'custom', text: 'その他の薬・ワクチン（自由記入）' }
+      ];
+    }
+    select.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.text}</option>`).join('');
+    
+    // 自由入力フィールドは最初非表示にする
+    const customNameWrap = document.getElementById('c-name-custom-wrap');
+    if (customNameWrap) customNameWrap.style.display = 'none';
+  }
   
   const titleMap = {
     vaccine: '混合ワクチン証明書を登録',
@@ -1856,8 +2229,29 @@ function openCertificateModal(certKey) {
   if (pet && pet.certificates && pet.certificates[certKey]) {
     const c = pet.certificates[certKey];
     document.getElementById('c-date').value = c.date;
-    if (certKey === 'vaccine') document.getElementById('c-name').value = c.name || '';
-    if (certKey === 'antibody') document.getElementById('c-result').value = c.result || '';
+    
+    if (certKey === 'vaccine') {
+      const select = document.getElementById('c-name-select');
+      const customNameWrap = document.getElementById('c-name-custom-wrap');
+      
+      // プリセットに含まれる値かどうか判定
+      const hasPreset = Array.from(select.options).some(opt => opt.value === c.name);
+      if (hasPreset && c.name !== '') {
+        select.value = c.name;
+        if (customNameWrap) customNameWrap.style.display = 'none';
+      } else if (c.name) {
+        // 自由記入の場合
+        select.value = 'custom';
+        document.getElementById('c-name').value = c.name;
+        if (customNameWrap) customNameWrap.style.display = 'block';
+      }
+    }
+    
+    if (certKey === 'antibody') {
+      document.getElementById('c-ab-val1').value = c.abVal1 || '';
+      document.getElementById('c-ab-val2').value = c.abVal2 || '';
+      document.getElementById('c-ab-val3').value = c.abVal3 || '';
+    }
     
     if (c.photo) {
       tempCertPhoto = c.photo;
@@ -1869,6 +2263,19 @@ function openCertificateModal(certKey) {
   }
   
   document.getElementById('modal-certificate').classList.add('open');
+}
+
+// セレクトボックス変更時のハンドラ
+function onCertNameSelectChange() {
+  const select = document.getElementById('c-name-select');
+  const customNameWrap = document.getElementById('c-name-custom-wrap');
+  if (select && customNameWrap) {
+    if (select.value === 'custom') {
+      customNameWrap.style.display = 'block';
+    } else {
+      customNameWrap.style.display = 'none';
+    }
+  }
 }
 
 function previewCertPhoto(event) {
@@ -1893,9 +2300,19 @@ function saveCertificateRecord() {
     return;
   }
   
-  if (certKey === 'vaccine' && !document.getElementById('c-name').value.trim()) {
-    alert('ワクチンの種類/製品名を入力してください');
-    return;
+  let vaccineName = '';
+  if (certKey === 'vaccine') {
+    const selectVal = document.getElementById('c-name-select').value;
+    if (selectVal === 'custom') {
+      vaccineName = document.getElementById('c-name').value.trim();
+    } else {
+      vaccineName = selectVal;
+    }
+    
+    if (!vaccineName) {
+      alert('ワクチンの種類/製品名を選択または入力してください');
+      return;
+    }
   }
   
   const data = loadData();
@@ -1910,10 +2327,61 @@ function saveCertificateRecord() {
     photo: tempCertPhoto || null
   };
   
-  if (certKey === 'vaccine') certData.name = document.getElementById('c-name').value.trim();
-  if (certKey === 'antibody') certData.result = document.getElementById('c-result').value.trim();
+  if (certKey === 'vaccine') certData.name = vaccineName;
+  if (certKey === 'antibody') {
+    certData.abVal1 = document.getElementById('c-ab-val1').value.trim();
+    certData.abVal2 = document.getElementById('c-ab-val2').value.trim();
+    certData.abVal3 = document.getElementById('c-ab-val3').value.trim();
+  }
   
   pet.certificates[certKey] = certData;
+  
+  // 【通院履歴への自動同期登録機能】
+  let syncName = '';
+  let syncAbVals = null;
+  let syncNotes = '';
+
+  if (certKey === 'vaccine') {
+    syncName = vaccineName;
+    syncNotes = '混合ワクチン予防接種証明書から同期登録';
+  } else if (certKey === 'rabies') {
+    syncName = '狂犬病予防注射';
+    syncNotes = '狂犬病予防注射済証から同期登録';
+  } else if (certKey === 'antibody') {
+    syncName = '抗体価検査済';
+    syncAbVals = {
+      val1: certData.abVal1,
+      val2: certData.abVal2,
+      val3: certData.abVal3
+    };
+    syncNotes = '抗体価検査結果証明から同期登録';
+  }
+
+  // 重複チェック (同じ日付かつ同じ種類のワクチン/予防記録があるか)
+  let existingRec = pet.medicalRecords.find(r => r.date === date && r.type === 'vaccine' && r.vaccineName === syncName);
+  
+  if (existingRec) {
+    existingRec.photo = certData.photo || existingRec.photo;
+    if (syncAbVals) {
+      existingRec.antibodyVals = syncAbVals;
+    }
+  } else {
+    const newMedRec = {
+      id: 'med_' + Date.now(),
+      date,
+      type: 'vaccine',
+      hospitalId: pet.hospitals[0] ? pet.hospitals[0].id : '',
+      doctor: '',
+      cost: '',
+      notes: syncNotes,
+      photo: certData.photo || null,
+      weight: '',
+      cares: { nail: false, tooth: false, flea: false },
+      vaccineName: syncName,
+      antibodyVals: syncAbVals
+    };
+    pet.medicalRecords.push(newMedRec);
+  }
   
   pets[idx] = pet;
   data[currentType] = pets;
@@ -1921,7 +2389,8 @@ function saveCertificateRecord() {
   
   closeModal(null, 'modal-certificate');
   renderCertificates();
-  showToast('証明書を保存しました ✓');
+  renderMedicalTimeline(); // タイムライン側も即座に再描画
+  showToast('証明書を保存し、通院履歴にも自動同期しました ✓');
 }
 
 function deleteCertificateRecord(certKey) {
@@ -1941,6 +2410,439 @@ function deleteCertificateRecord(certKey) {
   
   renderCertificates();
   showToast('証明書データをクリアしました');
+}
+
+// ==========================================
+// 6. お薬管理（マスター）とお薬服用カウンターのロジック
+// ==========================================
+
+// 服用ステータス（服用中/終了）の切り替え
+function selectMedicineStatus(status) {
+  const currentStatusInput = document.getElementById('med-status');
+  if (currentStatusInput) currentStatusInput.value = status;
+  
+  const btnActive = document.getElementById('med-status-active');
+  const btnEnded = document.getElementById('med-status-ended');
+  if (btnActive) btnActive.classList.toggle('selected', status === 'active');
+  if (btnEnded) btnEnded.classList.toggle('selected', status === 'ended');
+}
+
+// 特定日付におけるペットの年齢を算出するヘルパー関数
+function calculateAgeAtDate(birthdayStr, targetDateStr) {
+  if (!birthdayStr || !targetDateStr) return '不明';
+  const birth = new Date(birthdayStr);
+  const target = new Date(targetDateStr);
+  
+  let years = target.getFullYear() - birth.getFullYear();
+  let months = target.getMonth() - birth.getMonth();
+  
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  
+  if (years < 0) return '誕生前';
+  if (years === 0) return `${months}ヶ月`;
+  return `${years}歳${months}ヶ月`;
+}
+
+// 日常ケアのお薬服用カウンターセクションの描画（服用中のお薬のみ表示）
+function renderMedicineCareSection() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  const container = document.getElementById('medicine-care-grid');
+  if (!container) return;
+  
+  const dateStr = document.getElementById('quick-care-date').value;
+  if (!dateStr) return;
+  
+  // ステータスが服用中（active、または未定義=デフォルト服用中）のお薬に絞り込む
+  const activeMedicines = pet.medicines.filter(med => (med.status || 'active') === 'active');
+  
+  if (activeMedicines.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state" style="padding:15px; grid-column: 1/-1;">
+        <p style="font-size:13px;color:var(--text-light)">現在「服用中」として登録されているお薬がありません。<br>「お薬」タブから新しく登録するか、ステータスを服用中に変更してください。</p>
+      </div>
+    `;
+    return;
+  }
+  
+  // 対象日の服用ログを取得
+  const dayLogs = pet.medicineLogs[dateStr] || {};
+  
+  container.innerHTML = activeMedicines.map(med => {
+    const count = dayLogs[med.id] || 0;
+    return `
+      <div class="med-care-item">
+        <button class="med-care-btn ${count > 0 ? 'completed' : ''}" onclick="showMedicineDetailModal('${med.id}')">
+          <div class="med-care-icon">💊</div>
+          <div class="med-care-name">${escHtml(med.name)}</div>
+          <div class="med-care-dosage">${escHtml(med.dosage || med.usage || '用量未設定')}</div>
+          <div class="med-care-counter-val">${count} 回服用</div>
+        </button>
+        <div class="med-care-actions">
+          <button class="med-care-act-btn plus" onclick="changeMedicineCount('${med.id}', 1, event)" title="1回分追加">＋</button>
+          ${count > 0 ? `<button class="med-care-act-btn minus" onclick="changeMedicineCount('${med.id}', -1, event)" title="1回分取り消し">ー</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// お薬の服用回数の変更（＋/ーボタン）
+function changeMedicineCount(medId, delta, event) {
+  if (event) event.stopPropagation(); // ボタンタップ時に親のモーダル表示を防止
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  const dateStr = document.getElementById('quick-care-date').value;
+  if (!dateStr) return;
+  
+  if (!pet.medicineLogs[dateStr]) {
+    pet.medicineLogs[dateStr] = {};
+  }
+  
+  const currentCount = pet.medicineLogs[dateStr][medId] || 0;
+  const newCount = Math.max(0, currentCount + delta);
+  
+  if (newCount === 0) {
+    delete pet.medicineLogs[dateStr][medId];
+  } else {
+    pet.medicineLogs[dateStr][medId] = newCount;
+  }
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  renderMedicineCareSection();
+  if (delta > 0) {
+    showToast('服用を記録しました ✓');
+  } else {
+    showToast('服用を1回分取り消しました');
+  }
+}
+
+// お薬詳細モーダルから編集モーダルに遷移する
+function editMedicineFromDetail() {
+  const medId = document.getElementById('med-detail-id').value;
+  if (!medId) return;
+  
+  closeModal(null, 'modal-medicine-detail');
+  openMedicineModal(medId);
+}
+
+// お薬詳細モーダルを開く
+function showMedicineDetailModal(medId) {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  const med = pet.medicines.find(m => m.id === medId);
+  if (!med) return;
+  
+  const medDetailIdEl = document.getElementById('med-detail-id');
+  if (medDetailIdEl) medDetailIdEl.value = med.id;
+  
+  document.getElementById('med-detail-name').textContent = med.name;
+  document.getElementById('med-detail-usage').textContent = med.dosage || med.usage || '未設定';
+  
+  let periodStr = '未設定';
+  if (med.startDate) {
+    periodStr = `${formatDate(med.startDate)} (生後 ${calculateAgeAtDate(pet.birthday, med.startDate)}) 〜 `;
+    if (med.endDate) {
+      periodStr += `${formatDate(med.endDate)} (生後 ${calculateAgeAtDate(pet.birthday, med.endDate)})`;
+    } else {
+      periodStr += '継続中';
+    }
+  }
+  
+  // メモに服用ステータス、期間、および履歴タイムラインを表示
+  let historyHtml = '';
+  if (med.history && med.history.length > 0) {
+    historyHtml = `
+      <div style="margin-top:14px; border-top:1px dashed rgba(44,36,24,0.15); padding-top:10px;">
+        <span class="field-label" style="font-weight:700; color:var(--text-dark); margin-bottom:6px;">📈 服用履歴タイムライン</span>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${[...med.history].reverse().map(h => {
+            const startAge = calculateAgeAtDate(pet.birthday, h.startDate);
+            const endAge = h.endDate ? calculateAgeAtDate(pet.birthday, h.endDate) : '継続中';
+            const period = `${h.startDate ? formatDate(h.startDate) : '不明'} (${startAge}) 〜 ${h.endDate ? formatDate(h.endDate) : ''} (${endAge})`;
+            const statusLabel = h.status === 'active' ? '🔴 服用中' : '⚪ 服用終了';
+            return `
+              <div style="background:var(--white); padding:8px; border-radius:8px; border:1px solid rgba(44,36,24,0.06); font-size:11px; line-height:1.4;">
+                <div style="display:flex; justify-content:between; font-weight:700; margin-bottom:2px;">
+                  <span style="color:var(--accent)">${statusLabel}</span>
+                  <span style="color:var(--text-light); margin-left:auto;">${escHtml(h.dosage || '用量未設定')}</span>
+                </div>
+                <div style="color:var(--text-mid); font-size:10px;">期間: ${escHtml(period)}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  const statusStr = (med.status || 'active') === 'active' ? '💊 服用中' : '✓ 服用終了';
+  document.getElementById('med-detail-memo').innerHTML = `
+    <div style="margin-bottom:8px;"><strong>服用状態:</strong> <span style="font-weight:700; color:var(--accent);">${statusStr}</span></div>
+    <div style="margin-bottom:8px;"><strong>服用期間:</strong> <span style="font-size:12px; font-weight:700; color:var(--text-dark);">${periodStr}</span></div>
+    <div style="margin-bottom:8px;"><strong>効能・詳細メモ:</strong><br>${escHtml(med.notes || med.memo || 'なし')}</div>
+    ${historyHtml}
+  `;
+  
+  document.getElementById('modal-medicine-detail').classList.add('open');
+}
+
+// お薬マスタ一覧の描画（お薬タブ内）
+function renderMedicineListMaster() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  const container = document.getElementById('medicine-master-list');
+  if (!container) return;
+  
+  if (pet.medicines.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state" style="padding:40px 20px">
+        <div style="font-size:44px;margin-bottom:12px">💊</div>
+        <p>登録されているお薬がありません<br>「お薬を登録する」から追加してください</p>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = pet.medicines.map((med, index) => {
+    const isEnded = (med.status || 'active') === 'ended';
+    const statusText = isEnded ? '服用終了' : '服用中';
+    const statusClass = isEnded ? 'ended-status' : 'active-status';
+    
+    let periodText = '未設定';
+    if (med.startDate) {
+      const startAge = calculateAgeAtDate(pet.birthday, med.startDate);
+      const endAge = med.endDate ? calculateAgeAtDate(pet.birthday, med.endDate) : '継続中';
+      periodText = `${formatDate(med.startDate)} (${startAge}) 〜 ${med.endDate ? formatDate(med.endDate) : ''} (${endAge})`;
+    }
+
+    // 履歴アイテムのHTML構築
+    let historyListHtml = '';
+    if (med.history && med.history.length > 0) {
+      historyListHtml = `
+        <div class="med-history-timeline-section" style="margin-top:10px; border-top:1px dashed rgba(44,36,24,0.1); padding-top:8px;">
+          <span style="font-size:11px; font-weight:700; color:var(--text-light); display:block; margin-bottom:4px;">📊 過去の服用履歴</span>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${[...med.history].reverse().map(h => {
+              const hStartAge = calculateAgeAtDate(pet.birthday, h.startDate);
+              const hEndAge = h.endDate ? calculateAgeAtDate(pet.birthday, h.endDate) : '継続中';
+              const hPeriod = `${h.startDate ? formatDate(h.startDate) : '不明'} (${hStartAge}) 〜 ${h.endDate ? formatDate(h.endDate) : ''} (${hEndAge})`;
+              const hStatus = h.status === 'active' ? '服用中' : '終了';
+              return `
+                <div style="background:rgba(44,36,24,0.03); padding:6px; border-radius:6px; font-size:11px; display:flex; justify-content:between; align-items:center; gap:8px;">
+                  <span style="font-weight:700; color:var(--accent); font-size:10px;">${hStatus}</span>
+                  <span style="color:var(--text-mid); font-size:10px; flex:1;">${escHtml(hPeriod)}</span>
+                  <span style="font-weight:700; color:var(--text-dark); font-size:10px;">${escHtml(h.dosage || '用量未設定')}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="medicine-card ${isEnded ? 'ended-card' : ''}" id="med-card-${med.id}" style="${isEnded ? 'opacity: 0.85; border-left:4px solid var(--text-light);' : ''}">
+        <div class="medicine-card-header">
+          <span class="medicine-card-title" style="display:flex; align-items:center; gap:6px;">
+            💊 ${escHtml(med.name)}
+            <span class="med-status-badge ${statusClass}" style="font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px; background:${isEnded ? 'rgba(44,36,24,0.1)' : 'rgba(200, 132, 74, 0.1)'}; color:${isEnded ? 'var(--text-light)' : 'var(--accent)'};">${statusText}</span>
+          </span>
+          <div class="medicine-order-btns">
+            <button class="med-order-btn" onclick="moveMedicineOrder('${med.id}', -1)" ${index === 0 ? 'disabled' : ''}>▲</button>
+            <button class="med-order-btn" onclick="moveMedicineOrder('${med.id}', 1)" ${index === pet.medicines.length - 1 ? 'disabled' : ''}>▼</button>
+          </div>
+        </div>
+        <div class="medicine-card-body">
+          <div class="medicine-detail-grid">
+            <div class="med-grid-item"><strong>用量目安:</strong> <span>${escHtml(med.dosage || med.usage || '未設定')}</span></div>
+            <div class="med-grid-item"><strong>服用期間:</strong> <span style="font-size:11px;">${escHtml(periodText)}</span></div>
+            <div class="med-grid-item" style="grid-column: 1 / -1;"><strong>詳細メモ・効能:</strong> <p class="med-notes-box" style="margin:2px 0 0 0;">${escHtml(med.notes || med.memo || 'なし')}</p></div>
+          </div>
+          ${historyListHtml}
+          <div class="medicine-actions" style="margin-top:10px;">
+            <button class="medicine-act-btn edit" onclick="openMedicineModal('${med.id}')">✏️ 編集</button>
+            <button class="medicine-act-btn delete" onclick="deleteMedicineMaster('${med.id}')">✕ 削除</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// お薬マスタの新規登録・編集モーダルを開く
+function openMedicineModal(medId = null) {
+  document.getElementById('edit-medicine-id').value = medId || '';
+  document.getElementById('med-name').value = '';
+  document.getElementById('med-usage').value = '';
+  document.getElementById('med-start-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('med-end-date').value = '';
+  document.getElementById('med-memo').value = '';
+  
+  selectMedicineStatus('active');
+  
+  if (medId) {
+    document.getElementById('medicine-modal-title').textContent = 'お薬情報を編集';
+    const data = loadData();
+    const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+    if (pet) {
+      const med = pet.medicines.find(m => m.id === medId);
+      if (med) {
+        document.getElementById('med-name').value = med.name;
+        document.getElementById('med-usage').value = med.dosage || med.usage || '';
+        document.getElementById('med-start-date').value = med.startDate || '';
+        document.getElementById('med-end-date').value = med.endDate || '';
+        document.getElementById('med-memo').value = med.notes || med.memo || '';
+        selectMedicineStatus(med.status || 'active');
+      }
+    }
+  } else {
+    document.getElementById('medicine-modal-title').textContent = '新しいお薬を登録';
+  }
+  
+  document.getElementById('modal-medicine').classList.add('open');
+}
+
+// お薬マスタの保存処理 (HTML側の saveMedicineRecord をフックする)
+function saveMedicineRecord() {
+  const name = document.getElementById('med-name').value.trim();
+  if (!name) {
+    alert('お薬名を入力してください');
+    return;
+  }
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  const id = document.getElementById('edit-medicine-id').value;
+  
+  const dosage = document.getElementById('med-usage').value.trim();
+  const startDate = document.getElementById('med-start-date').value;
+  const endDate = document.getElementById('med-end-date').value;
+  const notes = document.getElementById('med-memo').value.trim();
+  const status = document.getElementById('med-status').value;
+  
+  let existingMed = null;
+  let history = [];
+  
+  if (id) {
+    const found = pet.medicines.find(m => m.id === id);
+    if (found) {
+      existingMed = found;
+      history = found.history || [];
+    }
+  }
+  
+  const medData = {
+    id: id || 'med_' + Date.now(),
+    name,
+    dosage,
+    startDate,
+    endDate,
+    notes,
+    status,
+    history
+  };
+  
+  // 服用履歴タイムラインの自動蓄積・変化監視
+  const lastHistory = history[history.length - 1];
+  if (!lastHistory || lastHistory.dosage !== dosage || lastHistory.status !== status || lastHistory.startDate !== startDate || lastHistory.endDate !== endDate) {
+    medData.history.push({
+      startDate,
+      endDate,
+      dosage,
+      status,
+      updatedAt: new Date().toISOString()
+    });
+  }
+  
+  if (id) {
+    const mIdx = pet.medicines.findIndex(m => m.id === id);
+    if (mIdx !== -1) pet.medicines[mIdx] = medData;
+  } else {
+    pet.medicines.push(medData);
+  }
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  closeModal(null, 'modal-medicine');
+  renderMedicineListMaster();
+  renderMedicineCareSection(); // 服用カウンター側も同期
+  showToast(id ? 'お薬情報を更新しました ✓' : 'お薬を登録しました ✓');
+}
+
+// お薬マスタの削除
+function deleteMedicineMaster(medId) {
+  if (!confirm('このお薬を削除しますか？日常ケア画面の服用カウンターからも非表示になります。')) return;
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  pet.medicines = pet.medicines.filter(m => m.id !== medId);
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  renderMedicineListMaster();
+  renderMedicineCareSection(); // 服用カウンター側も同期
+  showToast('お薬を削除しました');
+}
+
+// お薬マスタの並び替え (▲▼ボタン)
+function moveMedicineOrder(medId, direction) {
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  const mIdx = pet.medicines.findIndex(m => m.id === medId);
+  if (mIdx === -1) return;
+  
+  const targetIdx = mIdx + direction;
+  if (targetIdx < 0 || targetIdx >= pet.medicines.length) return;
+  
+  // 要素の入れ替え
+  const temp = pet.medicines[mIdx];
+  pet.medicines[mIdx] = pet.medicines[targetIdx];
+  pet.medicines[targetIdx] = temp;
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  renderMedicineListMaster();
+  renderMedicineCareSection(); // 服用カウンター側も同期
 }
 
 

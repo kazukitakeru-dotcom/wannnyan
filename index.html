@@ -402,6 +402,39 @@
           <span style="font-size:14px;color:var(--text-light);white-space:nowrap">kg</span>
         </div>
 
+        <!-- ワクチン・抗体価の詳細情報エリア (タイプがワクチン・予防の時のみ表示) -->
+        <div id="m-vaccine-area" style="display:none; background:var(--cream); padding:12px; border-radius:12px; margin-bottom:12px; border:1px solid rgba(44,36,24,0.08)">
+          <p class="issue-memo-label" style="margin-top:0">💉 ワクチン・抗体価の詳細記録</p>
+          
+          <label class="field-label">ワクチンの種類 / 検査名</label>
+          <select id="m-vaccine-select" class="field-input" onchange="onMedicalVaccineSelectChange()" style="margin-bottom:8px;">
+            <option value="">-- 選択してください --</option>
+          </select>
+          
+          <div id="m-vaccine-custom-wrap" style="display:none; margin-bottom:8px;">
+            <input type="text" id="m-vaccine-custom" class="field-input" placeholder="製品名や詳細情報を自由記入">
+          </div>
+
+          <!-- 抗体価3種数値フォーム (「抗体価検査済」を選択した場合に自動展開) -->
+          <div id="m-antibody-area" style="display:none; margin-top:8px;">
+            <p class="field-age-note" style="margin-bottom:8px; font-weight:700;">🔬 主要3種の抗体価を入力してください</p>
+            <div class="antibody-inputs-grid" style="display:flex; flex-direction:column; gap:8px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span id="m-ab-lbl1" style="font-size:12px; font-weight:700; width:120px; color:var(--text-dark)">FCV (カリシ):</span>
+                <input type="text" id="m-ab-val1" class="field-input" placeholder="例: 1:80 や 陽性" style="margin-bottom:0; flex:1">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span id="m-ab-lbl2" style="font-size:12px; font-weight:700; width:120px; color:var(--text-dark)">FHV (ヘルペス):</span>
+                <input type="text" id="m-ab-val2" class="field-input" placeholder="例: 1:160 や 陽性" style="margin-bottom:0; flex:1">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span id="m-ab-lbl3" style="font-size:12px; font-weight:700; width:120px; color:var(--text-dark)">FPV (パルボ):</span>
+                <input type="text" id="m-ab-val3" class="field-input" placeholder="例: 1:320 や 陽性" style="margin-bottom:0; flex:1">
+              </div>
+            </div>
+          </div>
+        </div>
+
         <label class="field-label">今回やってもらった日常ケア（完了に自動連動）</label>
         <div class="care-checkbox-grid" style="display:flex;gap:12px;margin-bottom:12px;margin-top:2px;">
           <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-nail"> 💅 爪切り</label>
@@ -443,15 +476,30 @@
 
         <div id="c-name-wrap">
           <label class="field-label">ワクチンの種類/製品名 <span class="required">*</span></label>
-          <select id="c-name-select" class="field-input" onchange="onCertVaccineSelectChange()" style="margin-bottom:8px;">
+          <select id="c-name-select" class="field-input" onchange="onCertNameSelectChange()" style="margin-bottom:8px;">
             <!-- JSで動的に犬用・猫用のプリセット肢を生成 -->
           </select>
-          <input type="text" id="c-name" class="field-input hidden" placeholder="ワクチンの種類/製品名を入力してください">
+          <div id="c-name-custom-wrap" style="display:none; margin-bottom:8px;">
+            <input type="text" id="c-name" class="field-input" placeholder="ワクチンの種類/製品名を入力してください">
+          </div>
         </div>
 
         <div id="c-result-wrap">
-          <label class="field-label">検査結果・抗体価</label>
-          <input type="text" id="c-result" class="field-input" placeholder="例: パルボ陽性(1:80), カリシ陽性">
+          <label class="field-label" style="margin-bottom:8px">🔬 主要3種の抗体価数値</label>
+          <div class="antibody-inputs-grid" style="display:flex; flex-direction:column; gap:8px; background:var(--cream); padding:12px; border-radius:12px; border:1px solid rgba(44,36,24,0.08)">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span id="c-ab-lbl1" style="font-size:12px; font-weight:700; width:120px; color:var(--text-dark)">FCV (カリシ):</span>
+              <input type="text" id="c-ab-val1" class="field-input" placeholder="例: 1:80 や 陽性" style="margin-bottom:0; flex:1">
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span id="c-ab-lbl2" style="font-size:12px; font-weight:700; width:120px; color:var(--text-dark)">FHV (ヘルペス):</span>
+              <input type="text" id="c-ab-val2" class="field-input" placeholder="例: 1:160 や 陽性" style="margin-bottom:0; flex:1">
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span id="c-ab-lbl3" style="font-size:12px; font-weight:700; width:120px; color:var(--text-dark)">FPV (パルボ):</span>
+              <input type="text" id="c-ab-val3" class="field-input" placeholder="例: 1:320 や 陽性" style="margin-bottom:0; flex:1">
+            </div>
+          </div>
         </div>
 
         <label class="field-label">証明写真（ロットシールや領収書）</label>
@@ -481,8 +529,28 @@
         <input type="hidden" id="edit-medicine-id">
         <label class="field-label">お薬の名前 <span class="required">*</span></label>
         <input type="text" id="med-name" class="field-input" placeholder="例: フィラリア予防薬、抗生物質">
-        <label class="field-label">用法の目安 (1日の回数など)</label>
+        
+        <label class="field-label">服用ステータス</label>
+        <div class="gender-select" style="margin-bottom:12px">
+          <button class="gender-btn selected" id="med-status-active" onclick="selectMedicineStatus('active')">💊 服用中</button>
+          <button class="gender-btn" id="med-status-ended" onclick="selectMedicineStatus('ended')">✓ 服用終了</button>
+        </div>
+        <input type="hidden" id="med-status" value="active">
+
+        <label class="field-label">現在の用法の目安 (1日の回数など)</label>
         <input type="text" id="med-usage" class="field-input" placeholder="例: 1日2回 朝晩、月1回">
+
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <div style="flex:1">
+            <label class="field-label">服用開始日</label>
+            <input type="date" id="med-start-date" class="field-input" style="margin-bottom:0">
+          </div>
+          <div style="flex:1" id="med-end-date-wrap">
+            <label class="field-label">服用終了日</label>
+            <input type="date" id="med-end-date" class="field-input" style="margin-bottom:0">
+          </div>
+        </div>
+
         <label class="field-label">お薬の詳細メモ・効果 (詳細表示用)</label>
         <textarea id="med-memo" class="field-input" rows="4" placeholder="例: 毎日のご飯に混ぜて与える。フィラリアとノミダニの予防効果。"></textarea>
       </div>
@@ -496,6 +564,7 @@
   <!-- モーダル：お薬の詳細確認 -->
   <div id="modal-medicine-detail" class="modal-overlay" onclick="closeModal(event,'modal-medicine-detail')">
     <div class="modal-box">
+      <input type="hidden" id="med-detail-id">
       <div class="modal-header">
         <h3 class="modal-title" id="med-detail-title">お薬の詳細</h3>
         <button class="modal-close" onclick="closeModal(null,'modal-medicine-detail')">✕</button>
@@ -516,8 +585,9 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer" style="padding-top:0;">
+      <div class="modal-footer" style="padding-top:0; display:flex; gap:10px;">
         <button class="btn-cancel" style="flex:1" onclick="closeModal(null,'modal-medicine-detail')">閉じる</button>
+        <button class="btn-submit" style="flex:1; background:var(--accent); color:var(--white)" onclick="editMedicineFromDetail()">✏️ 編集する</button>
       </div>
     </div>
   </div>
