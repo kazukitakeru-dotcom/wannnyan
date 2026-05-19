@@ -233,3 +233,750 @@ a, button {
   color: inherit;
   -webkit-text-fill-color: currentColor;
 }
+
+/* ==========================================================================
+   ===== 病院記録＆ケア 統合画面 (Hospital & Care Integration Screen) =====
+   ========================================================================== */
+
+/* 病院記録画面ヘッダーとタブ */
+.hospital-tabs {
+  display: flex;
+  background: var(--white);
+  border-bottom: 1px solid rgba(44,36,24,0.08);
+  flex-shrink: 0;
+  padding: 4px 6px;
+}
+.hospital-tab-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: var(--font);
+}
+.hospital-tab-btn .tab-icon {
+  font-size: 18px;
+  opacity: 0.6;
+  transition: transform 0.2s;
+}
+.hospital-tab-btn .tab-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+}
+.hospital-tab-btn.active {
+  background: rgba(200, 132, 74, 0.08);
+}
+.cat-type .hospital-tab-btn.active {
+  background: rgba(122, 156, 192, 0.08);
+}
+.hospital-tab-btn.active .tab-icon {
+  opacity: 1;
+  transform: scale(1.15);
+}
+.hospital-tab-btn.active .tab-label {
+  color: var(--accent);
+}
+
+/* タブコンテンツ全体のコンテナ */
+.hospital-tab-content-wrap {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--cream);
+  padding: 14px 14px calc(60px + env(safe-area-inset-bottom));
+}
+.hospital-tab-content {
+  display: none;
+  animation: tabFadeIn 0.3s ease both;
+}
+.hospital-tab-content.active {
+  display: block;
+}
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 1. 日常ケア (1タップクイック完了) */
+.quick-care-date-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--warm);
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.quick-date-input {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 13px;
+  border: 1px solid rgba(44,36,24,0.1);
+  background: var(--white);
+}
+.quick-care-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.quick-care-btn {
+  background: var(--cream);
+  border: 1.5px solid rgba(44,36,24,0.08);
+  border-radius: 16px;
+  padding: 14px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: var(--font);
+}
+.quick-care-btn .care-icon {
+  font-size: 26px;
+  filter: grayscale(0.7);
+  transition: all 0.2s;
+}
+.quick-care-btn .care-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-mid);
+}
+.quick-care-btn .care-status {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 20px;
+  background: rgba(44,36,24,0.06);
+  color: var(--text-light);
+  transition: all 0.2s;
+}
+.quick-care-btn:active {
+  transform: scale(0.95);
+}
+
+/* 完了状態のスタイル (グリーン系の優しいトーン) */
+.quick-care-btn.completed {
+  background: #eef9f2;
+  border-color: #a3e0be;
+}
+.quick-care-btn.completed .care-icon {
+  filter: grayscale(0);
+  transform: scale(1.1);
+}
+.quick-care-btn.completed .care-status {
+  background: #4caf80;
+  color: white;
+}
+
+/* 2. 体重推移グラフ & インライン追加 */
+.weight-graph-container {
+  position: relative;
+  background: linear-gradient(to bottom, #ffffff, #faf6f0);
+  border: 1px solid rgba(44,36,24,0.08);
+  border-radius: 14px;
+  height: 180px;
+  margin-bottom: 12px;
+  padding: 10px;
+  overflow: hidden;
+}
+.weight-svg-element {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.graph-tooltip {
+  position: absolute;
+  background: rgba(44,36,24,0.92);
+  color: white;
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transform: translate(-50%, -100%);
+  margin-top: -6px;
+  white-space: nowrap;
+  transition: opacity 0.15s, left 0.15s, top 0.15s;
+}
+.weight-add-inline {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.weight-add-inline .field-input {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.weight-history-list {
+  max-height: 150px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(44,36,24,0.06);
+  padding-top: 8px;
+}
+.weight-history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 4px;
+  font-size: 13px;
+  border-bottom: 1px dashed rgba(44,36,24,0.05);
+}
+.weight-history-item:last-child {
+  border-bottom: none;
+}
+.weight-history-date {
+  color: var(--text-light);
+}
+.weight-history-val {
+  font-weight: 700;
+  color: var(--text-dark);
+}
+.weight-history-del {
+  border: none;
+  background: transparent;
+  color: var(--red);
+  font-weight: 800;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+/* 3. 通院履歴 & タイムラインフィルター */
+.medical-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.medical-filter-tabs {
+  display: flex;
+  background: var(--warm);
+  padding: 4px;
+  border-radius: 12px;
+}
+.medical-filter-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-mid);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-family: var(--font);
+}
+.medical-filter-btn.active {
+  background: var(--white);
+  color: var(--text-dark);
+  box-shadow: 0 2px 6px rgba(44,36,24,0.06);
+}
+.add-medical-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+
+/* タイムライン年アコーディオン */
+.medical-timeline-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.timeline-year-group {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.timeline-year-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: var(--warm);
+  cursor: pointer;
+  user-select: none;
+}
+.timeline-year-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-dark);
+}
+.timeline-year-count {
+  font-size: 12px;
+  color: var(--text-light);
+  margin-left: 8px;
+}
+.timeline-year-arrow {
+  font-size: 12px;
+  color: var(--text-light);
+  transition: transform 0.25s;
+}
+.timeline-year-group.open .timeline-year-arrow {
+  transform: rotate(180deg);
+}
+.timeline-year-body {
+  display: none;
+  padding: 8px 14px 14px;
+  border-top: 1px solid rgba(44,36,24,0.06);
+}
+.timeline-year-group.open .timeline-year-body {
+  display: block;
+}
+
+/* 通院カード項目 */
+.timeline-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(44,36,24,0.06);
+  position: relative;
+}
+.timeline-item:last-child {
+  border-bottom: none;
+}
+.timeline-item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(200,132,74,0.1);
+  color: var(--dog-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.cat-type .timeline-item-icon {
+  background: rgba(122,156,192,0.12);
+  color: var(--cat-dark);
+}
+.timeline-item-icon.vaccine-type {
+  background: rgba(76,175,128,0.1);
+  color: #4caf80;
+}
+.timeline-item-content {
+  flex: 1;
+  min-width: 0;
+}
+.timeline-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.timeline-item-date-hosp {
+  font-size: 14px;
+  font-weight: 800;
+}
+.timeline-item-cost {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.timeline-item-meta {
+  font-size: 11px;
+  color: var(--text-light);
+  margin-bottom: 6px;
+}
+.timeline-item-notes {
+  font-size: 13px;
+  color: var(--text-mid);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.timeline-item-photo {
+  margin-top: 8px;
+  border-radius: 8px;
+  max-width: 100%;
+  max-height: 150px;
+  object-fit: cover;
+  border: 1px solid rgba(44,36,24,0.08);
+}
+.timeline-item-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.timeline-action-btn {
+  border: none;
+  background: var(--warm);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  color: var(--text-mid);
+  font-family: var(--font);
+}
+.timeline-action-btn.delete {
+  background: rgba(224,80,80,0.08);
+  color: var(--red);
+}
+
+/* 4. 病院紹介マスター */
+.hospital-master-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.hospital-master-desc {
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.5;
+}
+.add-hospital-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+.hospital-master-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hospital-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  border: 1px solid rgba(44,36,24,0.05);
+}
+.hospital-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(44,36,24,0.06);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.hospital-card-title {
+  font-size: 16px;
+  font-weight: 800;
+}
+.hospital-card-arrow {
+  font-size: 11px;
+  color: var(--text-light);
+  transition: transform 0.2s;
+}
+.hospital-card.open .hospital-card-arrow {
+  transform: rotate(90deg);
+}
+.hospital-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hospital-card-body {
+  display: none;
+}
+.hospital-card.open .hospital-card-body {
+  display: block;
+  animation: tabFadeIn 0.25s ease both;
+}
+.hospital-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-mid);
+}
+.hospital-detail-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 18px;
+}
+.hospital-detail-val {
+  flex: 1;
+}
+.hospital-detail-val.link {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 700;
+}
+.hospital-memo-box {
+  background: var(--warm);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-mid);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  margin: 6px 0;
+}
+
+/* 病院のアクション（シェア・編集・削除） */
+.hospital-actions-bar {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  border-top: 1px dashed rgba(44,36,24,0.06);
+  padding-top: 8px;
+}
+.hospital-act-btn {
+  flex: 1;
+  border: none;
+  background: var(--warm);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-mid);
+  font-family: var(--font);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.hospital-act-btn.share {
+  background: rgba(76,175,128,0.08);
+  color: #4caf80;
+}
+.hospital-act-btn.delete {
+  background: rgba(224,80,80,0.08);
+  color: var(--red);
+}
+
+/* 逆引き履歴テーブル */
+.hospital-reverse-records {
+  margin-top: 12px;
+  background: var(--cream);
+  border-radius: 10px;
+  padding: 10px;
+}
+.hospital-rev-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.hospital-stats-box {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.hospital-stat-pill {
+  flex: 1;
+  background: var(--white);
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+.hospital-stat-pill span {
+  display: block;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--accent);
+  margin-top: 2px;
+}
+.hospital-rev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.hospital-rev-item {
+  background: var(--white);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.hospital-rev-date-notes {
+  flex: 1;
+  min-width: 0;
+  padding-right: 8px;
+}
+.hospital-rev-notes {
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hospital-rev-cost {
+  font-weight: 800;
+  color: var(--text-dark);
+}
+
+/* 5. ワクチン & 抗体価証明書 */
+.certificates-desc {
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.certificates-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cert-card {
+  background: var(--white);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+  border: 2px solid rgba(44,36,24,0.06);
+  position: relative;
+  overflow: hidden;
+}
+/* 犬用・猫用・抗体価でアクセントを分ける */
+.cert-card.vaccine-card {
+  border-left: 6px solid var(--accent);
+}
+.cert-card.rabies-card {
+  border-left: 6px solid #e08e45;
+}
+.cert-card.antibody-card {
+  border-left: 6px solid #4caf80;
+}
+.cert-card-badge {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.vaccine-card .cert-card-badge { background: rgba(200,132,74,0.1); color: var(--dog-dark); }
+.cat-type .vaccine-card .cert-card-badge { background: rgba(122,156,192,0.12); color: var(--cat-dark); }
+.rabies-card .cert-card-badge { background: rgba(224,142,69,0.1); color: #c06c1c; }
+.antibody-card .cert-card-badge { background: rgba(76,175,128,0.1); color: #3b8e64; }
+
+.cert-card-title {
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cert-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.cert-detail-row {
+  display: flex;
+  font-size: 13px;
+}
+.cert-detail-lbl {
+  color: var(--text-light);
+  width: 90px;
+  font-weight: 600;
+}
+.cert-detail-val {
+  flex: 1;
+  font-weight: 700;
+}
+.cert-card-photo-wrap {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(44,36,24,0.08);
+  margin-bottom: 12px;
+  background: var(--cream);
+  text-align: center;
+}
+.cert-card-photo {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.cert-photo-empty {
+  padding: 24px;
+  font-size: 12px;
+  color: var(--text-light);
+  font-style: italic;
+}
+.cert-card-actions {
+  display: flex;
+  gap: 8px;
+}
+.cert-card-btn {
+  flex: 1;
+  border: none;
+  background: var(--warm);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 0;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text-dark);
+  font-family: var(--font);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.cert-card-btn.upload {
+  background: var(--accent);
+  color: white;
+}
+
+/* ==========================================================================
+   ===== 詳細画面 (Detail Screen) の登録日バッジと病院記録ボタンの配置 =====
+   ========================================================================== */
+.detail-header-meta-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+.reg-date-badge {
+  font-size: 11px;
+  color: var(--text-light);
+  margin-bottom: 0 !important; /* flex-gapで制御するため */
+}
+.detail-hospital-records-btn-new {
+  border: none;
+  background: var(--accent);
+  color: white;
+  padding: 7px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 3px 10px rgba(200,132,74,0.18);
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.cat-type .detail-hospital-records-btn-new {
+  box-shadow: 0 3px 10px rgba(122,156,192,0.18);
+}
+.detail-hospital-records-btn-new:active {
+  transform: scale(0.96);
+}

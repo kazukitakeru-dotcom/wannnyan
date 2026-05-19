@@ -252,13 +252,21 @@ function renderDetailContent(pet, isEditing) {
   const genderViewHtml = pet.gender||'未設定';
   const genderEditHtml = genders.map(g=>`<button class="gender-btn${pet.gender===g?' selected':''}" onclick="selectGender(this,'${g}')">${g==='オス'?'♂ オス':g==='メス'?'♀ メス':'❓ 不明'}</button>`).join('');
 
-  container.innerHTML = `<div class="${isEditing?'editing-mode':''}">
-    <span class="reg-date-badge">登録日 ${formatTs(pet.createdAt)}</span>
+  // 登録日バッジと病院記録ボタンの縦並びヘッダー（閲覧・編集モード共通の丸い顔写真をベースに構築）
+  const headerHtml = `
+    <div class="detail-header-meta-wrap">
+      <span class="reg-date-badge">登録日 ${formatTs(pet.createdAt)}</span>
+      ${!isEditing ? `<button class="detail-hospital-records-btn-new" onclick="openHospitalRecords('${pet.id}')">🏥 病院記録・ケア</button>` : ''}
+    </div>
     <div class="detail-photo-wrap">
       <div class="detail-photo">${photoInner}</div>
       <button class="photo-change-btn" onclick="changeDetailPhoto()">📷</button>
       <input type="file" id="detail-photo-input" accept="image/*,image/heic,image/heif" class="hidden" onchange="onDetailPhotoChange(event)">
-    </div>
+    </div>`;
+
+  container.innerHTML = `<div class="${isEditing?'editing-mode':''}">
+    ${headerHtml}
+    
     <div class="detail-card">
       <div class="detail-card-title">基本情報</div>
       <div class="detail-field">
@@ -848,6 +856,1087 @@ function confirmReset(){
   if(currentType)renderList();
 }
 
+// ========== 病院記録＆ケア 統合機能 (Hospital & Care Integration) ==========
+let currentHospitalTab = 'care-weight';
+let currentMedicalFilter = 'all';
+let tempMedicalPhoto = null;
+let tempCertPhoto = null;
+
+// ペットデータの新規フィールドを安全に確保する後方互換用関数
+function ensurePetHospitalFields(pet) {
+  if (!pet.weightHistory) pet.weightHistory = [];
+  if (!pet.quickCares) pet.quickCares = {};
+  if (!pet.hospitals) pet.hospitals = [];
+  if (!pet.medicalRecords) pet.medicalRecords = [];
+  if (!pet.certificates) pet.certificates = {};
+  return pet;
+}
+
+// 病院記録＆ケア統合画面を開く
+function openHospitalRecords(petId) {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === petId);
+  if (!pet) return;
+  
+  currentPetId = petId;
+  ensurePetHospitalFields(pet);
+  
+  // 初期タブの設定
+  currentHospitalTab = 'care-weight';
+  currentMedicalFilter = 'all';
+  
+  // 日常ケアの日付を本日に設定
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+  
+  const qDateEl = document.getElementById('quick-care-date');
+  if (qDateEl) qDateEl.value = dateStr;
+  
+  const wDateEl = document.getElementById('weight-add-date');
+  if (wDateEl) wDateEl.value = dateStr;
+
+  // 画面遷移
+  document.getElementById('hospital-header-title').textContent = `${pet.name}の病院記録・ケア`;
+  showScreen('screen-hospital-records');
+  
+  // 各タブ要素の初期描画
+  switchHospitalTab('care-weight');
+  
+  // 各自データの再描画
+  renderQuickCares();
+  renderWeightSection();
+  renderMedicalTimeline();
+  renderHospitalMaster();
+  renderCertificates();
+}
+
+// 統合画面からペット詳細画面に戻る
+function goToDetail() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (pet) {
+    renderDetailContent(pet, false);
+  }
+  showScreen('screen-detail', 'back');
+}
+
+// 統合画面内のサブタブを切り替える
+function switchHospitalTab(tabId) {
+  currentHospitalTab = tabId;
+  
+  // タブボタンのアクティブ表示切り替え
+  const tabs = document.querySelectorAll('.hospital-tab-btn');
+  tabs.forEach(tab => {
+    const onclickStr = tab.getAttribute('onclick');
+    if (onclickStr && onclickStr.includes(tabId)) {
+      tab.classList.add('active');
+    } else {
+      tab.classList.remove('active');
+    }
+  });
+  
+  // コンテンツの表示/非表示切り替え
+  const contents = document.querySelectorAll('.hospital-tab-content');
+  contents.forEach(content => {
+    if (content.id === `tab-${tabId}`) {
+      content.classList.add('active');
+    } else {
+      content.classList.remove('active');
+    }
+  });
+
+  // タブに応じた個別処理
+  if (tabId === 'care-weight') {
+    drawWeightGraph();
+  }
+}
+
+// ==========================================
+// 1. 日常ケア (1タップクイック完了) のロジック
+// ==========================================
+function renderQuickCares() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  const dateStr = document.getElementById('quick-care-date').value;
+  if (!dateStr) return;
+  
+  const dayCares = pet.quickCares[dateStr] || {};
+  const careTypes = ['nail', 'tooth', 'flea'];
+  
+  careTypes.forEach(type => {
+    const btn = document.getElementById(`care-${type}`);
+    if (!btn) return;
+    
+    const isDone = !!dayCares[type];
+    const statusEl = btn.querySelector('.care-status');
+    
+    if (isDone) {
+      btn.classList.add('completed');
+      if (statusEl) statusEl.textContent = '完了 ✓';
+    } else {
+      btn.classList.remove('completed');
+      if (statusEl) statusEl.textContent = '未完了';
+    }
+  });
+}
+
+function toggleQuickCare(type) {
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  const dateStr = document.getElementById('quick-care-date').value;
+  if (!dateStr) {
+    alert('日付を選択してください');
+    return;
+  }
+  
+  if (!pet.quickCares[dateStr]) pet.quickCares[dateStr] = {};
+  
+  // 状態の反転
+  const nextVal = !pet.quickCares[dateStr][type];
+  pet.quickCares[dateStr][type] = nextVal;
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  renderQuickCares();
+  
+  const labelMap = { nail: '爪切り', tooth: '歯磨き', flea: 'ノミ・ダニ予防' };
+  showToast(`${labelMap[type]}を${nextVal ? '完了にしました' : '未完了にしました'}`);
+}
+
+// ==========================================
+// 2. 体重推移グラフ & 登録のロジック
+// ==========================================
+function renderWeightSection() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  // 履歴リストの描画
+  const historyContainer = document.getElementById('weight-history-list');
+  const history = [...pet.weightHistory].sort((a,b) => b.date.localeCompare(a.date));
+  
+  if (history.length === 0) {
+    historyContainer.innerHTML = '<div class="cert-photo-empty" style="padding:10px 0">体重の記録がありません</div>';
+  } else {
+    historyContainer.innerHTML = history.map(item => `
+      <div class="weight-history-item">
+        <span class="weight-history-date">${escHtml(formatDate(item.date))}</span>
+        <div>
+          <span class="weight-history-val">${escHtml(item.weight)} kg</span>
+          <button class="weight-history-del" onclick="deleteWeightRecord('${item.id}')">✕</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  drawWeightGraph();
+}
+
+function drawWeightGraph() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  const container = document.getElementById('weight-graph-container');
+  const svg = document.getElementById('weight-svg');
+  if (!container || !svg) return;
+  
+  // 過去日付順にソート
+  const history = [...pet.weightHistory].sort((a,b) => a.date.localeCompare(b.date));
+  
+  if (history.length < 2) {
+    svg.innerHTML = `
+      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="12" fill="var(--text-light)">
+        グラフを表示するには2件以上の記録が必要です
+      </text>
+    `;
+    return;
+  }
+  
+  // スケーリングパラメータの算出（縦軸自動最適化）
+  const weights = history.map(h => h.weight);
+  const minW = Math.min(...weights);
+  const maxW = Math.max(...weights);
+  
+  // 範囲に余白を持たせて自動調整
+  const diff = maxW - minW;
+  const padding = diff === 0 ? 1 : diff * 0.25;
+  const minY = Math.max(0, minW - padding);
+  const maxY = maxW + padding;
+  
+  // SVGの描画領域サイズ定義
+  const width = container.clientWidth - 20;
+  const height = 160;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  
+  const chartX = 40;
+  const chartY = 15;
+  const chartW = width - chartX - 15;
+  const chartH = height - chartY - 30;
+  
+  // 背景目盛り線と左側ラベル
+  let ticksHtml = '';
+  const tickCount = 4;
+  for (let i = 0; i <= tickCount; i++) {
+    const yVal = minY + (maxY - minY) * (i / tickCount);
+    const yPos = chartY + chartH - (chartH * (i / tickCount));
+    ticksHtml += `
+      <line x1="${chartX}" y1="${yPos}" x2="${chartX + chartW}" y2="${yPos}" stroke="rgba(44,36,24,0.06)" stroke-dasharray="2,2" />
+      <text x="${chartX - 6}" y="${yPos + 4}" text-anchor="end" font-size="9" font-weight="700" fill="var(--text-light)">${yVal.toFixed(1)}</text>
+    `;
+  }
+  
+  // 各プロットポイントの座標マッピング
+  const points = history.map((item, index) => {
+    const xRatio = index / (history.length - 1);
+    const yRatio = (item.weight - minY) / (maxY - minY);
+    return {
+      x: chartX + chartW * xRatio,
+      y: chartY + chartH - chartH * yRatio,
+      date: item.date,
+      weight: item.weight
+    };
+  });
+  
+  // 折れ線パス
+  let pathD = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    pathD += ` L ${points[i].x} ${points[i].y}`;
+  }
+  
+  // エリアグラデーション用のパス
+  const areaD = `${pathD} L ${points[points.length - 1].x} ${chartY + chartH} L ${points[0].x} ${chartY + chartH} Z`;
+  
+  // 折れ線と点、下部日付テキスト
+  let elementsHtml = `
+    <defs>
+      <linearGradient id="graph-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.25" />
+        <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.0" />
+      </linearGradient>
+    </defs>
+    <path d="${areaD}" fill="url(#graph-grad)" />
+    <path d="${pathD}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+  `;
+  
+  // プロットポイント（タップでツールチップ表示）
+  points.forEach((pt, index) => {
+    const showLabel = index === 0 || index === points.length - 1 || index === Math.floor(points.length / 2);
+    const dObj = new Date(pt.date);
+    const dateLabel = `${dObj.getMonth() + 1}/${dObj.getDate()}`;
+    
+    elementsHtml += `
+      <circle cx="${pt.x}" cy="${pt.y}" r="4.5" fill="var(--white)" stroke="var(--accent)" stroke-width="2.5" 
+              onclick="showGraphTooltip(${pt.x}, ${pt.y}, '${pt.date}', ${pt.weight})" style="cursor:pointer;" />
+    `;
+    
+    if (showLabel) {
+      elementsHtml += `
+        <text x="${pt.x}" y="${chartY + chartH + 16}" text-anchor="middle" font-size="9" font-weight="700" fill="var(--text-light)">${dateLabel}</text>
+      `;
+    }
+  });
+  
+  svg.innerHTML = ticksHtml + elementsHtml;
+}
+
+function showGraphTooltip(x, y, dateStr, weight) {
+  const tooltip = document.getElementById('graph-tooltip');
+  if (!tooltip) return;
+  
+  tooltip.innerHTML = `${formatDate(dateStr)}<br><strong>${weight.toFixed(2)} kg</strong>`;
+  tooltip.classList.remove('hidden');
+  tooltip.style.left = `${x + 10}px`;
+  tooltip.style.top = `${y + 10}px`;
+  
+  // 3秒後に非表示
+  setTimeout(() => { tooltip.classList.add('hidden'); }, 3000);
+}
+
+function addWeightRecord() {
+  const dateStr = document.getElementById('weight-add-date').value;
+  const weightVal = parseFloat(document.getElementById('weight-add-val').value);
+  
+  if (!dateStr || isNaN(weightVal) || weightVal <= 0) {
+    alert('日付と正しい体重(kg)を入力してください');
+    return;
+  }
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  
+  // 既存の日付があれば上書き、なければ新規追加
+  const existingIdx = pet.weightHistory.findIndex(w => w.date === dateStr);
+  if (existingIdx !== -1) {
+    pet.weightHistory[existingIdx].weight = weightVal;
+  } else {
+    pet.weightHistory.push({
+      id: 'w_' + Date.now(),
+      date: dateStr,
+      weight: weightVal
+    });
+  }
+  
+  // 基本プロフィールの体重情報も、最新日のものに連動
+  const sortedHistory = [...pet.weightHistory].sort((a,b) => b.date.localeCompare(a.date));
+  if (sortedHistory.length > 0) {
+    pet.weight = String(sortedHistory[0].weight);
+  }
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  document.getElementById('weight-add-val').value = '';
+  renderWeightSection();
+  showToast('体重を記録しました ✓');
+}
+
+function deleteWeightRecord(id) {
+  if (!confirm('この体重の記録を削除しますか？')) return;
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  pet.weightHistory = pet.weightHistory.filter(w => w.id !== id);
+  
+  // 体重情報の連動更新
+  const sortedHistory = [...pet.weightHistory].sort((a,b) => b.date.localeCompare(a.date));
+  if (sortedHistory.length > 0) {
+    pet.weight = String(sortedHistory[0].weight);
+  } else {
+    pet.weight = '';
+  }
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  renderWeightSection();
+  showToast('削除しました');
+}
+
+// ==========================================
+// 3. 病院紹介（マスター）のロジック
+// ==========================================
+function renderHospitalMaster() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  const container = document.getElementById('hospital-master-list');
+  if (pet.hospitals.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state" style="padding:40px 20px">
+        <div style="font-size:44px;margin-bottom:12px">🏢</div>
+        <p>登録されている病院がありません<br>「病院を登録する」ボタンから追加してください</p>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = pet.hospitals.map(hosp => {
+    // 逆引き集計 (その病院での「過去の治療値段・平均費用」や「クチコミ(メモ)」)
+    const records = pet.medicalRecords.filter(r => r.hospitalId === hosp.id);
+    const costs = records.map(r => Number(r.cost || 0)).filter(c => c > 0);
+    const averageCost = costs.length > 0 
+      ? Math.round(costs.reduce((sum, val) => sum + val, 0) / costs.length)
+      : 0;
+    
+    // クチコミ逆引き
+    const reviewRecords = records.filter(r => (r.notes || '').trim() !== '');
+    const reviewListHtml = reviewRecords.length > 0
+      ? reviewRecords.map(r => `
+          <div class="hospital-rev-item">
+            <div class="hospital-rev-date-notes">
+              <div style="font-weight:700;color:var(--text-mid)">${formatDate(r.date)}</div>
+              <div class="hospital-rev-notes">${escHtml(r.notes)}</div>
+            </div>
+            ${r.cost ? `<div class="hospital-rev-cost">${Number(r.cost).toLocaleString()}円</div>` : ''}
+          </div>
+        `).join('')
+      : '<div class="cert-photo-empty" style="padding:6px 0">診療メモがありません</div>';
+
+    return `
+      <div class="hospital-card" id="hosp-card-${hosp.id}">
+        <div class="hospital-card-header" onclick="toggleHospitalCard('${hosp.id}')">
+          <span class="hospital-card-title">🏢 ${escHtml(hosp.name)}</span>
+          <span class="hospital-card-arrow">▶</span>
+        </div>
+        <div class="hospital-card-body">
+          <div class="hospital-card-details">
+            ${hosp.phone ? `
+              <div class="hospital-detail-row">
+                <span class="hospital-detail-icon">📞</span>
+                <span class="hospital-detail-val link" onclick="window.open('tel:${escHtml(hosp.phone)}')">${escHtml(hosp.phone)} (発信)</span>
+              </div>` : ''}
+            ${hosp.address ? `
+              <div class="hospital-detail-row">
+                <span class="hospital-detail-icon">📍</span>
+                <span class="hospital-detail-val link" onclick="window.open('https://maps.google.com/?q=${encodeURIComponent(hosp.address)}', '_blank')">${escHtml(hosp.address)} (地図)</span>
+              </div>` : ''}
+            ${hosp.doctor ? `
+              <div class="hospital-detail-row">
+                <span class="hospital-detail-icon">👨‍⚕️</span>
+                <span class="hospital-detail-val">担当：<strong>${escHtml(hosp.doctor)}</strong></span>
+              </div>` : ''}
+          </div>
+          
+          ${hosp.memo ? `
+            <p class="issue-memo-label">特色・印象（病院メモ）</p>
+            <div class="hospital-memo-box">${escHtml(hosp.memo)}</div>` : ''}
+            
+          <!-- 逆引き治療履歴セクション -->
+          <div class="hospital-reverse-records">
+            <div class="hospital-rev-title">🏥 治療実績とクチコミ（逆引き一覧）</div>
+            <div class="hospital-stats-box">
+              <div class="hospital-stat-pill">受診回数<span>${records.length}回</span></div>
+              <div class="hospital-stat-pill">平均費用<span>${averageCost > 0 ? averageCost.toLocaleString() + '円' : '記録なし'}</span></div>
+            </div>
+            <p class="issue-memo-label">過去の診療メモ</p>
+            <div class="hospital-rev-list">${reviewListHtml}</div>
+          </div>
+          
+          <div class="hospital-actions-bar">
+            <button class="hospital-act-btn share" onclick="shareHospital('${hosp.id}')">📢 シェア</button>
+            <button class="hospital-act-btn edit" onclick="openHospitalModal('${hosp.id}')">✏️ 編集</button>
+            <button class="hospital-act-btn delete" onclick="deleteHospitalRecord('${hosp.id}')">✕ 削除</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleHospitalCard(id) {
+  const card = document.getElementById(`hosp-card-${id}`);
+  if (card) card.classList.toggle('open');
+}
+
+function openHospitalModal(hospitalId = null) {
+  // フィールドの初期化
+  document.getElementById('edit-hospital-id').value = hospitalId || '';
+  document.getElementById('h-name').value = '';
+  document.getElementById('h-phone').value = '';
+  document.getElementById('h-address').value = '';
+  document.getElementById('h-doctor').value = '';
+  document.getElementById('h-memo').value = '';
+  
+  if (hospitalId) {
+    document.getElementById('hospital-modal-title').textContent = '病院情報を編集';
+    const data = loadData();
+    const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+    if (pet) {
+      const hosp = pet.hospitals.find(h => h.id === hospitalId);
+      if (hosp) {
+        document.getElementById('h-name').value = hosp.name;
+        document.getElementById('h-phone').value = hosp.phone || '';
+        document.getElementById('h-address').value = hosp.address || '';
+        document.getElementById('h-doctor').value = hosp.doctor || '';
+        document.getElementById('h-memo').value = hosp.memo || '';
+      }
+    }
+  } else {
+    document.getElementById('hospital-modal-title').textContent = '病院を新規登録';
+  }
+  
+  document.getElementById('modal-hospital').classList.add('open');
+}
+
+function saveHospitalRecord() {
+  const name = document.getElementById('h-name').value.trim();
+  if (!name) {
+    alert('病院名を入力してください');
+    return;
+  }
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  const id = document.getElementById('edit-hospital-id').value;
+  
+  const hospData = {
+    id: id || 'hosp_' + Date.now(),
+    name,
+    phone: document.getElementById('h-phone').value.trim(),
+    address: document.getElementById('h-address').value.trim(),
+    doctor: document.getElementById('h-doctor').value.trim(),
+    memo: document.getElementById('h-memo').value.trim()
+  };
+  
+  if (id) {
+    const hIdx = pet.hospitals.findIndex(h => h.id === id);
+    if (hIdx !== -1) pet.hospitals[hIdx] = hospData;
+  } else {
+    pet.hospitals.push(hospData);
+  }
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  closeModal(null, 'modal-hospital');
+  renderHospitalMaster();
+  renderMedicalTimeline(); // 通院モーダルのセレクトリスト更新用
+  showToast(id ? '病院情報を更新しました ✓' : '病院を登録しました ✓');
+}
+
+function deleteHospitalRecord(hospitalId) {
+  if (!confirm('この病院を削除しますか？紐づく通院記録の表示に影響する場合があります。')) return;
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  pet.hospitals = pet.hospitals.filter(h => h.id !== hospitalId);
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  renderHospitalMaster();
+  showToast('病院を削除しました');
+}
+
+// ワンタップシェア機能 (病院情報をテキストコピー)
+function shareHospital(hospitalId) {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  const hosp = pet.hospitals.find(h => h.id === hospitalId);
+  if (!hosp) return;
+  
+  // テキストの組み立て
+  let shareText = `【おすすめの動物病院】\n`;
+  shareText += `🏥 病院名: ${hosp.name}\n`;
+  if (hosp.phone) shareText += `📞 電話: ${hosp.phone}\n`;
+  if (hosp.address) {
+    shareText += `📍 住所: ${hosp.address}\n`;
+    shareText += `🗺️ マップ: https://maps.google.com/?q=${encodeURIComponent(hosp.address)}\n`;
+  }
+  if (hosp.doctor) shareText += `👨‍⚕️ 担当医: ${hosp.doctor}\n`;
+  if (hosp.memo) shareText += `📝 メモ: ${hosp.memo}\n`;
+  shareText += `\n（わんにゃんメモリー より共有）`;
+  
+  navigator.clipboard.writeText(shareText).then(() => {
+    showToast('病院情報をコピーしました！LINE等に貼り付けられます ✓');
+  }).catch(() => {
+    alert('コピーに失敗しました。お手数ですが手動でコピーしてください。');
+  });
+}
+
+// ==========================================
+// 4. 通院履歴タイムラインのロジック
+// ==========================================
+function filterMedicalTimeline(filter) {
+  currentMedicalFilter = filter;
+  
+  // フィルターボタンのアクティブ状態切り替え
+  const btns = document.querySelectorAll('.medical-filter-btn');
+  btns.forEach(btn => {
+    const onclickStr = btn.getAttribute('onclick');
+    if (onclickStr && onclickStr.includes(filter)) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  renderMedicalTimeline();
+}
+
+function renderMedicalTimeline() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  const container = document.getElementById('medical-timeline-container');
+  
+  // フィルター適用
+  let records = pet.medicalRecords;
+  if (currentMedicalFilter !== 'all') {
+    records = records.filter(r => r.type === currentMedicalFilter);
+  }
+  
+  if (records.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state" style="padding:40px 20px">
+        <div style="font-size:44px;margin-bottom:12px">🏥</div>
+        <p>該当する通院記録がありません</p>
+      </div>
+    `;
+    return;
+  }
+  
+  // 日付の降順にソート
+  records.sort((a, b) => b.date.localeCompare(a.date));
+  
+  // 年（YYYY）ごとにグループ化
+  const groups = {};
+  records.forEach(rec => {
+    const year = rec.date.split('-')[0] || '不明';
+    if (!groups[year]) groups[year] = [];
+    groups[year].push(rec);
+  });
+  
+  const sortedYears = Object.keys(groups).sort((a,b) => b.localeCompare(a));
+  const currentYear = new Date().getFullYear().toString();
+  
+  container.innerHTML = sortedYears.map((year, index) => {
+    // 最初のグループ、あるいは今年ならデフォルト展開（openクラスを付与）
+    const isOpen = index === 0 || year === currentYear;
+    const yearRecords = groups[year];
+    
+    const recordsHtml = yearRecords.map(rec => {
+      const hosp = pet.hospitals.find(h => h.id === rec.hospitalId);
+      const hospName = hosp ? hosp.name : '不明な病院';
+      const icon = rec.type === 'vaccine' ? '💉' : '🏥';
+      const iconClass = rec.type === 'vaccine' ? 'vaccine-type' : '';
+      
+      return `
+        <div class="timeline-item">
+          <div class="timeline-item-icon ${iconClass}">${icon}</div>
+          <div class="timeline-item-content">
+            <div class="timeline-item-header">
+              <span class="timeline-item-date-hosp">${escHtml(formatDate(rec.date))}<br><span style="font-size:12px;color:var(--text-mid);font-weight:700;">${escHtml(hospName)}</span></span>
+              ${rec.cost ? `<span class="timeline-item-cost">${Number(rec.cost).toLocaleString()} 円</span>` : ''}
+            </div>
+            ${rec.doctor ? `<div class="timeline-item-meta">担当医：${escHtml(rec.doctor)}</div>` : ''}
+            ${rec.notes ? `<div class="timeline-item-notes">${escHtml(rec.notes)}</div>` : ''}
+            ${rec.photo ? `<img class="timeline-item-photo" src="${rec.photo}" alt="領収書・明細書" onclick="window.open('${rec.photo}','_blank')">` : ''}
+            
+            <div class="timeline-item-actions">
+              <button class="timeline-action-btn" onclick="openMedicalRecordModal('${rec.id}')">✏️ 編集</button>
+              <button class="timeline-action-btn delete" onclick="deleteMedicalRecord('${rec.id}')">✕ 削除</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="timeline-year-group ${isOpen ? 'open' : ''}" id="year-group-${year}">
+        <div class="timeline-year-header" onclick="toggleYearGroup('${year}')">
+          <span class="timeline-year-title">${year}年 <span class="timeline-year-count">(${yearRecords.length}件)</span></span>
+          <span class="timeline-year-arrow">▼</span>
+        </div>
+        <div class="timeline-year-body">
+          ${recordsHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleYearGroup(year) {
+  const el = document.getElementById(`year-group-${year}`);
+  if (el) el.classList.toggle('open');
+}
+
+function openMedicalRecordModal(recordId = null) {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  // 病院のセレクトボックスの構築
+  const select = document.getElementById('m-hospital-select');
+  select.innerHTML = '<option value="">-- 選択してください --</option>' + 
+    pet.hospitals.map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
+  
+  // 各自フィールドの初期化
+  document.getElementById('edit-medical-id').value = recordId || '';
+  document.getElementById('m-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('m-doctor').value = '';
+  document.getElementById('m-cost').value = '';
+  document.getElementById('m-notes').value = '';
+  document.getElementById('m-photo-preview').src = '';
+  document.getElementById('m-photo-preview').classList.add('hidden');
+  document.getElementById('m-photo-placeholder').classList.remove('hidden');
+  tempMedicalPhoto = null;
+  
+  selectMedicalType('medical');
+  
+  if (recordId) {
+    document.getElementById('medical-modal-title').textContent = '通院記録を編集';
+    const rec = pet.medicalRecords.find(r => r.id === recordId);
+    if (rec) {
+      document.getElementById('m-date').value = rec.date;
+      selectMedicalType(rec.type || 'medical');
+      select.value = rec.hospitalId;
+      document.getElementById('m-doctor').value = rec.doctor || '';
+      document.getElementById('m-cost').value = rec.cost || '';
+      document.getElementById('m-notes').value = rec.notes || '';
+      
+      if (rec.photo) {
+        tempMedicalPhoto = rec.photo;
+        const preview = document.getElementById('m-photo-preview');
+        preview.src = rec.photo;
+        preview.classList.remove('hidden');
+        document.getElementById('m-photo-placeholder').classList.add('hidden');
+      }
+    }
+  } else {
+    document.getElementById('medical-modal-title').textContent = '通院記録を追加';
+    
+    // 【前回のコンテキスト自動引き継ぎ機能】
+    // 最も新しい既存の通院記録があれば、病院名と担当医をプリセット
+    if (pet.medicalRecords.length > 0) {
+      const sorted = [...pet.medicalRecords].sort((a,b) => b.date.localeCompare(a.date));
+      const latest = sorted[0];
+      
+      // セレクトボックスに該当病院が存在すればセット
+      if (pet.hospitals.some(h => h.id === latest.hospitalId)) {
+        select.value = latest.hospitalId;
+        document.getElementById('m-doctor').value = latest.doctor || '';
+      }
+    }
+  }
+  
+  document.getElementById('modal-medical-record').classList.add('open');
+}
+
+function selectMedicalType(type) {
+  document.getElementById('m-type').value = type;
+  document.getElementById('m-type-medical').classList.toggle('selected', type === 'medical');
+  document.getElementById('m-type-vaccine').classList.toggle('selected', type === 'vaccine');
+}
+
+// 病院を変更した際に、病院マスターから担当医(何先生)を自動プレフィルする
+function onMedicalHospitalChange() {
+  const hospId = document.getElementById('m-hospital-select').value;
+  if (!hospId) return;
+  
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (pet) {
+    const hosp = pet.hospitals.find(h => h.id === hospId);
+    if (hosp && hosp.doctor) {
+      document.getElementById('m-doctor').value = hosp.doctor;
+    }
+  }
+}
+
+function previewMedicalPhoto(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  compressAndLoad(file, data => {
+    tempMedicalPhoto = data;
+    const preview = document.getElementById('m-photo-preview');
+    preview.src = data;
+    preview.classList.remove('hidden');
+    document.getElementById('m-photo-placeholder').classList.add('hidden');
+  });
+}
+
+function saveMedicalRecord() {
+  const date = document.getElementById('m-date').value;
+  const hospitalId = document.getElementById('m-hospital-select').value;
+  
+  if (!date || !hospitalId) {
+    alert('日付と病院を選択してください');
+    return;
+  }
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  const id = document.getElementById('edit-medical-id').value;
+  
+  const recData = {
+    id: id || 'med_' + Date.now(),
+    date,
+    type: document.getElementById('m-type').value,
+    hospitalId,
+    doctor: document.getElementById('m-doctor').value.trim(),
+    cost: document.getElementById('m-cost').value ? Number(document.getElementById('m-cost').value) : '',
+    notes: document.getElementById('m-notes').value.trim(),
+    photo: tempMedicalPhoto || null
+  };
+  
+  if (id) {
+    const rIdx = pet.medicalRecords.findIndex(r => r.id === id);
+    if (rIdx !== -1) pet.medicalRecords[rIdx] = recData;
+  } else {
+    pet.medicalRecords.push(recData);
+  }
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  closeModal(null, 'modal-medical-record');
+  renderMedicalTimeline();
+  renderHospitalMaster(); // 逆引き一覧の再更新用
+  showToast(id ? '記録を更新しました ✓' : '通院記録を保存しました ✓');
+}
+
+function deleteMedicalRecord(recordId) {
+  if (!confirm('この通院記録を削除しますか？')) return;
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  pet.medicalRecords = pet.medicalRecords.filter(r => r.id !== recordId);
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  renderMedicalTimeline();
+  renderHospitalMaster(); // 逆引き一覧の再更新用
+  showToast('記録を削除しました');
+}
+
+// ==========================================
+// 5. 証明書機能のロジック
+// ==========================================
+function renderCertificates() {
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  
+  ensurePetHospitalFields(pet);
+  
+  const container = document.getElementById('certificates-container');
+  
+  // 表示する証明書カードの定義
+  const certs = [];
+  const typeLabel = currentType === 'dog' ? '犬' : '猫';
+  
+  // 1. 混合ワクチン
+  const vLimit = currentType === 'dog' ? '5〜10種混合' : '3〜5種混合';
+  certs.push({
+    key: 'vaccine',
+    title: `🛡️ 混合ワクチン予防接種証明書`,
+    badge: 'ワクチン証明',
+    desc: `${typeLabel}用の混合ワクチン（${vLimit}）`,
+    data: pet.certificates.vaccine || null
+  });
+  
+  // 2. 狂犬病ワクチン (犬のみ)
+  if (currentType === 'dog') {
+    certs.push({
+      key: 'rabies',
+      title: `🐕 狂犬病予防注射済証`,
+      badge: '狂犬病証明',
+      desc: '狂犬病予防法に基づく注射済証明',
+      data: pet.certificates.rabies || null
+    });
+  }
+  
+  // 3. 抗体価検査
+  certs.push({
+    key: 'antibody',
+    title: `🔬 抗体価検査証明（結果報告）`,
+    badge: '抗体価検査',
+    desc: 'パルボFPV、カリシFCV、ヘルペスFHV1等の抗体価',
+    data: pet.certificates.antibody || null
+  });
+  
+  container.innerHTML = certs.map(c => {
+    const hasData = !!c.data;
+    const dateVal = hasData ? formatDate(c.data.date) : '未登録';
+    const detailRows = [];
+    
+    if (c.key === 'vaccine') {
+      detailRows.push(`<div class="cert-detail-row"><span class="cert-detail-lbl">ワクチン名</span><span class="cert-detail-val">${escHtml(hasData ? c.data.name : '-')}</span></div>`);
+    }
+    
+    if (c.key === 'antibody') {
+      detailRows.push(`<div class="cert-detail-row"><span class="cert-detail-lbl">検査結果</span><span class="cert-detail-val">${escHtml(hasData ? c.data.result : '-')}</span></div>`);
+    }
+    
+    const photoHtml = (hasData && c.data.photo)
+      ? `<div class="cert-card-photo-wrap"><img class="cert-card-photo" src="${c.data.photo}" alt="証明写真" onclick="window.open('${c.data.photo}','_blank')"></div>`
+      : `<div class="cert-card-photo-wrap"><div class="cert-photo-empty">ロット番号シールや領収書・証明写真がありません</div></div>`;
+      
+    return `
+      <div class="cert-card ${c.key}-card">
+        <span class="cert-card-badge">${c.badge}</span>
+        <div class="cert-card-title">${c.title}</div>
+        
+        <div class="cert-card-details">
+          <div class="cert-detail-row">
+            <span class="cert-detail-lbl">接種・検査日</span>
+            <span class="cert-detail-val">${escHtml(dateVal)}</span>
+          </div>
+          ${detailRows.join('')}
+        </div>
+        
+        ${photoHtml}
+        
+        <div class="cert-card-actions">
+          <button class="cert-card-btn upload" onclick="openCertificateModal('${c.key}')">${hasData ? '✏️ 編集する' : '＋ 証明書を登録する'}</button>
+          ${hasData ? `<button class="cert-card-btn" onclick="deleteCertificateRecord('${c.key}')">✕ クリア</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openCertificateModal(certKey) {
+  document.getElementById('cert-key').value = certKey;
+  
+  // 入力項目の出し分け
+  const nameWrap = document.getElementById('c-name-wrap');
+  const resultWrap = document.getElementById('c-result-wrap');
+  
+  nameWrap.style.display = certKey === 'vaccine' ? 'block' : 'none';
+  resultWrap.style.display = certKey === 'antibody' ? 'block' : 'none';
+  
+  // デフォルト値の初期化
+  document.getElementById('c-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('c-name').value = '';
+  document.getElementById('c-result').value = '';
+  document.getElementById('c-photo-preview').src = '';
+  document.getElementById('c-photo-preview').classList.add('hidden');
+  document.getElementById('c-photo-placeholder').classList.remove('hidden');
+  tempCertPhoto = null;
+  
+  const titleMap = {
+    vaccine: '混合ワクチン証明書を登録',
+    rabies: '狂犬病予防注射済証を登録',
+    antibody: '抗体価検査証明を登録'
+  };
+  document.getElementById('cert-modal-title').textContent = titleMap[certKey] || '証明書を登録';
+  
+  // 既存データ取得
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (pet && pet.certificates && pet.certificates[certKey]) {
+    const c = pet.certificates[certKey];
+    document.getElementById('c-date').value = c.date;
+    if (certKey === 'vaccine') document.getElementById('c-name').value = c.name || '';
+    if (certKey === 'antibody') document.getElementById('c-result').value = c.result || '';
+    
+    if (c.photo) {
+      tempCertPhoto = c.photo;
+      const preview = document.getElementById('c-photo-preview');
+      preview.src = c.photo;
+      preview.classList.remove('hidden');
+      document.getElementById('c-photo-placeholder').classList.add('hidden');
+    }
+  }
+  
+  document.getElementById('modal-certificate').classList.add('open');
+}
+
+function previewCertPhoto(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  compressAndLoad(file, data => {
+    tempCertPhoto = data;
+    const preview = document.getElementById('c-photo-preview');
+    preview.src = data;
+    preview.classList.remove('hidden');
+    document.getElementById('c-photo-placeholder').classList.add('hidden');
+  });
+}
+
+function saveCertificateRecord() {
+  const date = document.getElementById('c-date').value;
+  const certKey = document.getElementById('cert-key').value;
+  
+  if (!date) {
+    alert('接種・検査日を入力してください');
+    return;
+  }
+  
+  if (certKey === 'vaccine' && !document.getElementById('c-name').value.trim()) {
+    alert('ワクチンの種類/製品名を入力してください');
+    return;
+  }
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  
+  const certData = {
+    date,
+    photo: tempCertPhoto || null
+  };
+  
+  if (certKey === 'vaccine') certData.name = document.getElementById('c-name').value.trim();
+  if (certKey === 'antibody') certData.result = document.getElementById('c-result').value.trim();
+  
+  pet.certificates[certKey] = certData;
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  closeModal(null, 'modal-certificate');
+  renderCertificates();
+  showToast('証明書を保存しました ✓');
+}
+
+function deleteCertificateRecord(certKey) {
+  if (!confirm('この証明書の記録を削除（クリア）しますか？')) return;
+  
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  
+  const pet = ensurePetHospitalFields(pets[idx]);
+  delete pet.certificates[certKey];
+  
+  pets[idx] = pet;
+  data[currentType] = pets;
+  saveData(data);
+  
+  renderCertificates();
+  showToast('証明書データをクリアしました');
+}
+
+
 // ========== Modal 共通 ==========
 function closeModal(event, id){
   if(!event||event.target===event.currentTarget){
@@ -869,3 +1958,4 @@ function showToast(msg){
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
+

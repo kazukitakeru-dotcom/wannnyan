@@ -192,6 +192,242 @@
     </div>
   </div>
 
+  <!-- 病院記録＆ケア統合画面 -->
+  <div id="screen-hospital-records" class="screen">
+    <header class="app-header">
+      <button class="back-btn" onclick="goToDetail()"><span class="back-arrow">←</span></button>
+      <div class="header-title" id="hospital-header-title">病院記録・ケア</div>
+      <div style="width:36px"></div>
+    </header>
+    
+    <!-- 統合画面のサブタブナビゲーション -->
+    <div class="hospital-tabs">
+      <button class="hospital-tab-btn active" onclick="switchHospitalTab('care-weight')">
+        <span class="tab-icon">🐾</span>
+        <span class="tab-label">ケア・体重</span>
+      </button>
+      <button class="hospital-tab-btn" onclick="switchHospitalTab('medical-history')">
+        <span class="tab-icon">🏥</span>
+        <span class="tab-label">通院履歴</span>
+      </button>
+      <button class="hospital-tab-btn" onclick="switchHospitalTab('hospital-master')">
+        <span class="tab-icon">🏢</span>
+        <span class="tab-label">病院紹介</span>
+      </button>
+      <button class="hospital-tab-btn" onclick="switchHospitalTab('certificates')">
+        <span class="tab-icon">📜</span>
+        <span class="tab-label">証明書</span>
+      </button>
+    </div>
+
+    <!-- 各タブのコンテンツ -->
+    <div class="hospital-tab-content-wrap">
+      <!-- 1. ケア＆体重タブ -->
+      <div id="tab-care-weight" class="hospital-tab-content active">
+        <!-- クイック日常ケア -->
+        <div class="detail-card">
+          <div class="detail-card-title">✨ 日常ケア（1タップ完了記録）</div>
+          <div class="quick-care-date-selector">
+            <label class="field-label" style="margin-bottom:0">記録日：</label>
+            <input type="date" id="quick-care-date" class="field-input quick-date-input" onchange="renderQuickCares()">
+          </div>
+          <div class="quick-care-grid">
+            <button class="quick-care-btn" id="care-nail" onclick="toggleQuickCare('nail')">
+              <span class="care-icon">💅</span>
+              <span class="care-label">爪切り</span>
+              <span class="care-status">未完了</span>
+            </button>
+            <button class="quick-care-btn" id="care-tooth" onclick="toggleQuickCare('tooth')">
+              <span class="care-icon">🪥</span>
+              <span class="care-label">歯磨き</span>
+              <span class="care-status">未完了</span>
+            </button>
+            <button class="quick-care-btn" id="care-flea" onclick="toggleQuickCare('flea')">
+              <span class="care-icon">💊</span>
+              <span class="care-label">ノミ・ダニ予防</span>
+              <span class="care-status">未完了</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 体重推移グラフ & 登録 -->
+        <div class="detail-card">
+          <div class="detail-card-title">📈 体重推移グラフ</div>
+          <div class="weight-graph-container" id="weight-graph-container">
+            <!-- 動的SVGグラフがここに描画されます -->
+            <svg id="weight-svg" class="weight-svg-element" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <!-- JSで動的構築 -->
+            </svg>
+            <div id="graph-tooltip" class="graph-tooltip hidden"></div>
+          </div>
+          
+          <div class="weight-add-inline">
+            <input type="date" id="weight-add-date" class="field-input">
+            <input type="number" id="weight-add-val" class="field-input" placeholder="体重 (kg)" step="0.01" min="0">
+            <button class="btn-primary" onclick="addWeightRecord()" style="padding:10px 14px;border-radius:10px;font-size:13px;white-space:nowrap;flex-shrink:0;">追加</button>
+          </div>
+
+          <div class="weight-history-list" id="weight-history-list">
+            <!-- 履歴リスト -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 通院履歴タブ -->
+      <div id="tab-medical-history" class="hospital-tab-content">
+        <div class="medical-controls">
+          <div class="medical-filter-tabs">
+            <button class="medical-filter-btn active" onclick="filterMedicalTimeline('all')">すべて</button>
+            <button class="medical-filter-btn" onclick="filterMedicalTimeline('medical')">病院・医療</button>
+            <button class="medical-filter-btn" onclick="filterMedicalTimeline('vaccine')">ワクチン・予防</button>
+          </div>
+          <button class="btn-primary add-medical-btn" onclick="openMedicalRecordModal()">＋ 通院記録を追加</button>
+        </div>
+        
+        <div id="medical-timeline-container" class="medical-timeline-container">
+          <!-- タイムラインアコーディオンがここに描画されます -->
+        </div>
+      </div>
+
+      <!-- 3. 病院紹介タブ -->
+      <div id="tab-hospital-master" class="hospital-tab-content">
+        <div class="hospital-master-header">
+          <p class="hospital-master-desc">かかりつけ医やお世話になっている施設を登録しておけます。</p>
+          <button class="btn-primary add-hospital-btn" onclick="openHospitalModal()">＋ 病院を登録する</button>
+        </div>
+        <div id="hospital-master-list" class="hospital-master-list">
+          <!-- 病院一覧カード -->
+        </div>
+      </div>
+
+      <!-- 4. 証明書タブ -->
+      <div id="tab-certificates" class="hospital-tab-content">
+        <div class="certificates-desc">混合ワクチン、狂犬病ワクチン、抗体価検査の証明書を管理。ドッグラン等の受付でそのまま提示できます。</div>
+        
+        <div id="certificates-container" class="certificates-container">
+          <!-- 証明書カード -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル：病院の登録・編集 -->
+  <div id="modal-hospital" class="modal-overlay" onclick="closeModal(event,'modal-hospital')">
+    <div class="modal-box modal-box-tall">
+      <div class="modal-header">
+        <h3 class="modal-title" id="hospital-modal-title">病院を登録</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-hospital')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-hospital-id">
+        <label class="field-label">病院名 <span class="required">*</span></label>
+        <input type="text" id="h-name" class="field-input" placeholder="例: わんにゃん動物病院">
+        <label class="field-label">電話番号 (タップ発信に対応)</label>
+        <input type="tel" id="h-phone" class="field-input" placeholder="例: 03-1234-5678">
+        <label class="field-label">住所 (マップ連動用)</label>
+        <input type="text" id="h-address" class="field-input" placeholder="例: 東京都渋谷区南3丁目">
+        <label class="field-label">担当医 (何先生)</label>
+        <input type="text" id="h-doctor" class="field-input" placeholder="例: 山田先生">
+        <label class="field-label">病院の特色・印象 (メモ)</label>
+        <textarea id="h-memo" class="field-input" rows="3" placeholder="夜間対応あり、優しい、日曜日開院など"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal(null,'modal-hospital')">キャンセル</button>
+        <button class="btn-primary" onclick="saveHospitalRecord()">登録する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル：通院記録の登録・編集 -->
+  <div id="modal-medical-record" class="modal-overlay" onclick="closeModal(event,'modal-medical-record')">
+    <div class="modal-box modal-box-tall">
+      <div class="modal-header">
+        <h3 class="modal-title" id="medical-modal-title">通院記録を追加</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-medical-record')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-medical-id">
+        
+        <label class="field-label">日付 <span class="required">*</span></label>
+        <input type="date" id="m-date" class="field-input">
+        
+        <label class="field-label">記録タイプ</label>
+        <div class="gender-select" style="margin-bottom:6px">
+          <button class="gender-btn selected" id="m-type-medical" onclick="selectMedicalType('medical')">🏥 病院・医療</button>
+          <button class="gender-btn" id="m-type-vaccine" onclick="selectMedicalType('vaccine')">💉 ワクチン・予防</button>
+        </div>
+        <input type="hidden" id="m-type" value="medical">
+
+        <label class="field-label">受診する病院 <span class="required">*</span></label>
+        <select id="m-hospital-select" class="field-input" onchange="onMedicalHospitalChange()">
+          <option value="">-- 選択してください --</option>
+        </select>
+        <p class="field-age-note" style="margin-top:-6px;margin-bottom:6px">※先に「病院紹介」タブで病院を登録してください</p>
+
+        <label class="field-label">担当医 (何先生)</label>
+        <input type="text" id="m-doctor" class="field-input" placeholder="例: 山田先生">
+
+        <label class="field-label">治療費・値段 (円)</label>
+        <input type="number" id="m-cost" class="field-input" placeholder="例: 5400" min="0">
+
+        <label class="field-label">診療内容・症状メモ (自分だけの口コミ)</label>
+        <textarea id="m-notes" class="field-input" rows="4" placeholder="例: 外耳炎の治療。薬を処方してもらった。"></textarea>
+
+        <label class="field-label">明細書・領収書の写真</label>
+        <div class="photo-upload-area" onclick="document.getElementById('m-photo-input').click()">
+          <img id="m-photo-preview" class="photo-preview hidden" src="" alt="">
+          <div id="m-photo-placeholder" class="photo-placeholder">
+            <span>📷</span><span>タップして領収書等の写真を添付</span>
+          </div>
+          <input type="file" id="m-photo-input" accept="image/*,image/heic,image/heif" class="hidden" onchange="previewMedicalPhoto(event)">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal(null,'modal-medical-record')">キャンセル</button>
+        <button class="btn-primary" onclick="saveMedicalRecord()">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル：証明書の登録 -->
+  <div id="modal-certificate" class="modal-overlay" onclick="closeModal(event,'modal-certificate')">
+    <div class="modal-box modal-box-tall">
+      <div class="modal-header">
+        <h3 class="modal-title" id="cert-modal-title">証明書を登録</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-certificate')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cert-key">
+        
+        <label class="field-label">接種・検査日 <span class="required">*</span></label>
+        <input type="date" id="c-date" class="field-input">
+
+        <div id="c-name-wrap">
+          <label class="field-label">ワクチンの種類/製品名 <span class="required">*</span></label>
+          <input type="text" id="c-name" class="field-input" placeholder="例: 7種混合ワクチン">
+        </div>
+
+        <div id="c-result-wrap">
+          <label class="field-label">検査結果・抗体価</label>
+          <input type="text" id="c-result" class="field-input" placeholder="例: パルボ陽性(1:80), カリシ陽性">
+        </div>
+
+        <label class="field-label">証明写真（ロットシールや領収書）</label>
+        <div class="photo-upload-area" onclick="document.getElementById('c-photo-input').click()">
+          <img id="c-photo-preview" class="photo-preview hidden" src="" alt="">
+          <div id="c-photo-placeholder" class="photo-placeholder">
+            <span>📷</span><span>タップして証明書等の写真を添付</span>
+          </div>
+          <input type="file" id="c-photo-input" accept="image/*,image/heic,image/heif" class="hidden" onchange="previewCertPhoto(event)">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal(null,'modal-certificate')">キャンセル</button>
+        <button class="btn-primary" onclick="saveCertificateRecord()">保存する</button>
+      </div>
+    </div>
+  </div>
+
   <script src="breeds.js"></script>
   <script src="app.js"></script>
 </body>
