@@ -192,7 +192,6 @@
     </div>
   </div>
 
-  <!-- 病院記録＆ケア統合画面 -->
   <div id="screen-hospital-records" class="screen">
     <header class="app-header">
       <button class="back-btn" onclick="goToDetail()"><span class="back-arrow">←</span></button>
@@ -200,7 +199,6 @@
       <div style="width:36px"></div>
     </header>
     
-    <!-- 統合画面のサブタブナビゲーション -->
     <div class="hospital-tabs">
       <button class="hospital-tab-btn active" onclick="switchHospitalTab('care-weight')">
         <span class="tab-icon">🐾</span>
@@ -224,11 +222,8 @@
       </button>
     </div>
 
-    <!-- 各タブのコンテンツ -->
     <div class="hospital-tab-content-wrap">
-      <!-- 1. ケア＆体重タブ -->
       <div id="tab-care-weight" class="hospital-tab-content active">
-        <!-- クイック日常ケア -->
         <div class="detail-card">
           <div class="detail-card-title">✨ 日常ケア（1タップ完了記録）</div>
           <div class="quick-care-date-selector">
@@ -255,18 +250,14 @@
           
           <p class="issue-memo-label" style="margin-top:14px; margin-bottom: 6px;">💊 本日のお薬チェック（タップで増加 / ーで減少）</p>
           <div class="medicine-care-grid" id="medicine-care-grid">
-            <!-- JSで登録されている薬を動的に構築 -->
-          </div>
+            </div>
         </div>
 
-        <!-- 体重推移グラフ & 登録 -->
         <div class="detail-card">
           <div class="detail-card-title">📈 体重推移グラフ</div>
           <div class="weight-graph-container" id="weight-graph-container">
-            <!-- 動的SVGグラフがここに描画されます -->
             <svg id="weight-svg" class="weight-svg-element" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <!-- JSで動的構築 -->
-            </svg>
+              </svg>
             <div id="graph-tooltip" class="graph-tooltip hidden"></div>
           </div>
           
@@ -277,11 +268,9 @@
           </div>
 
           <div class="weight-history-list" id="weight-history-list">
-            <!-- 履歴リスト -->
-          </div>
+            </div>
         </div>
 
-        <!-- 日常ケアカレンダー -->
         <div class="detail-card" style="margin-top: 14px;">
           <div class="detail-card-title" style="display:flex; justify-content:space-between; align-items:center;">
             <span>🗓️ 日常ケアカレンダー</span>
@@ -292,8 +281,7 @@
             </div>
           </div>
           <div id="care-calendar-container" style="margin-top:10px;">
-            <!-- JSで動的カレンダーを描画 -->
-          </div>
+            </div>
           <div class="care-legend" style="display:flex; gap:12px; flex-wrap:wrap; font-size:10.5px; font-weight:700; color:var(--text-light); margin-top:10px; border-top:1px dashed rgba(44,36,24,0.1); padding-top:8px; justify-content:center;">
             <span>💅 爪切り</span>
             <span>🪥 歯磨き</span>
@@ -303,7 +291,6 @@
         </div>
       </div>
 
-      <!-- 2. 通院履歴タブ -->
       <div id="tab-medical-history" class="hospital-tab-content">
         <div class="medical-controls">
           <div class="medical-filter-tabs">
@@ -315,44 +302,36 @@
         </div>
         
         <div id="medical-timeline-container" class="medical-timeline-container">
-          <!-- タイムラインアコーディオンがここに描画されます -->
-        </div>
+          </div>
       </div>
 
-      <!-- お薬管理タブ（NEW） -->
       <div id="tab-medicine-tab" class="hospital-tab-content">
         <div class="hospital-master-header">
           <p class="hospital-master-desc">毎日飲むお薬や、頓服薬を登録して日常ケアで簡単に服用記録を残せます。▲▼ボタンで並び順の調整も可能です。</p>
           <button class="btn-primary add-medicine-btn" onclick="openMedicineModal()">＋ お薬を登録する</button>
         </div>
         <div id="medicine-list-container" class="medicine-list-container">
-          <!-- JSでお薬カードを動的構築 -->
-        </div>
+          </div>
       </div>
 
-      <!-- 3. 病院紹介タブ -->
       <div id="tab-hospital-master" class="hospital-tab-content">
         <div class="hospital-master-header">
           <p class="hospital-master-desc">かかりつけ医やお世話になっている施設を登録しておけます。</p>
           <button class="btn-primary add-hospital-btn" onclick="openHospitalModal()">＋ 病院を登録する</button>
         </div>
         <div id="hospital-master-list" class="hospital-master-list">
-          <!-- 病院一覧カード -->
-        </div>
+          </div>
       </div>
 
-      <!-- 4. 証明書タブ -->
       <div id="tab-certificates" class="hospital-tab-content">
         <div class="certificates-desc">混合ワクチン、狂犬病ワクチン、抗体価検査の証明書を管理。ドッグラン等の受付でそのまま提示できます。</div>
         
         <div id="certificates-container" class="certificates-container">
-          <!-- 証明書カード -->
-        </div>
+          </div>
       </div>
     </div>
   </div>
 
-  <!-- モーダル：病院の登録・編集 -->
   <div id="modal-hospital" class="modal-overlay" onclick="closeModal(event,'modal-hospital')">
     <div class="modal-box modal-box-tall">
       <div class="modal-header">
@@ -374,8 +353,7 @@
 
         <label class="field-label" style="margin-top:10px;">📋 治療メニュー・料金表（目安価格）</label>
         <div id="hospital-price-editor" class="hospital-price-editor" style="display:flex;flex-direction:column;gap:8px;">
-          <!-- JSで動的に追加削除行を生成します -->
-        </div>
+          </div>
         <button type="button" class="allergy-add-btn" onclick="addPriceEditRow()" style="margin-top:8px;padding:6px;font-size:12px;">＋ 料金メニューを追加</button>
       </div>
       <div class="modal-footer">
@@ -385,7 +363,6 @@
     </div>
   </div>
 
-  <!-- モーダル：通院記録の登録・編集 -->
   <div id="modal-medical-record" class="modal-overlay" onclick="closeModal(event,'modal-medical-record')">
     <div class="modal-box modal-box-tall">
       <div class="modal-header">
@@ -423,7 +400,6 @@
           <span style="font-size:14px;color:var(--text-light);white-space:nowrap">kg</span>
         </div>
 
-        <!-- ワクチン・抗体価の詳細情報エリア (タイプがワクチン・予防の時のみ表示) -->
         <div id="m-vaccine-area" style="display:none; background:var(--cream); padding:12px; border-radius:12px; margin-bottom:12px; border:1px solid rgba(44,36,24,0.08)">
           <p class="issue-memo-label" style="margin-top:0">💉 ワクチン・抗体価の詳細記録</p>
           
@@ -436,7 +412,6 @@
             <input type="text" id="m-vaccine-custom" class="field-input" placeholder="製品名や詳細情報を自由記入">
           </div>
 
-          <!-- 抗体価3種数値フォーム (「抗体価検査済」を選択した場合に自動展開) -->
           <div id="m-antibody-area" style="display:none; margin-top:8px;">
             <p class="field-age-note" style="margin-bottom:8px; font-weight:700;">🔬 主要3種の抗体価を入力してください</p>
             <div class="antibody-inputs-grid" style="display:flex; flex-direction:column; gap:8px;">
@@ -482,7 +457,6 @@
     </div>
   </div>
 
-  <!-- モーダル：証明書の登録 -->
   <div id="modal-certificate" class="modal-overlay" onclick="closeModal(event,'modal-certificate')">
     <div class="modal-box modal-box-tall">
       <div class="modal-header">
@@ -498,8 +472,7 @@
         <div id="c-name-wrap">
           <label class="field-label">ワクチンの種類/製品名 <span class="required">*</span></label>
           <select id="c-name-select" class="field-input" onchange="onCertNameSelectChange()" style="margin-bottom:8px;">
-            <!-- JSで動的に犬用・猫用のプリセット肢を生成 -->
-          </select>
+            </select>
           <div id="c-name-custom-wrap" style="display:none; margin-bottom:8px;">
             <input type="text" id="c-name" class="field-input" placeholder="ワクチンの種類/製品名を入力してください">
           </div>
@@ -539,7 +512,6 @@
     </div>
   </div>
 
-  <!-- モーダル：お薬の登録・編集 -->
   <div id="modal-medicine" class="modal-overlay" onclick="closeModal(event,'modal-medicine')">
     <div class="modal-box modal-box-tall">
       <div class="modal-header">
@@ -582,7 +554,6 @@
     </div>
   </div>
 
-  <!-- モーダル：お薬の詳細確認 -->
   <div id="modal-medicine-detail" class="modal-overlay" onclick="closeModal(event,'modal-medicine-detail')">
     <div class="modal-box">
       <input type="hidden" id="med-detail-id">
@@ -609,25 +580,6 @@
       <div class="modal-footer" style="padding-top:0; display:flex; gap:10px;">
         <button class="btn-cancel" style="flex:1" onclick="closeModal(null,'modal-medicine-detail')">閉じる</button>
         <button class="btn-submit" style="flex:1; background:var(--accent); color:var(--white)" onclick="editMedicineFromDetail()">✏️ 編集する</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- モーダル：病院の共有方法選択（ハーフシート風） -->
-  <div id="modal-share-sheet" class="modal-overlay" onclick="closeModal(event,'modal-share-sheet')">
-    <div class="modal-box modal-box-small" style="border-radius:24px 24px 0 0; margin-bottom: 0; width: 100%; max-width: 480px; position: absolute; bottom: 0;">
-      <div class="modal-header">
-        <h3 class="modal-title">病院情報の共有</h3>
-        <button class="modal-close" onclick="closeModal(null,'modal-share-sheet')">✕</button>
-      </div>
-      <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;padding-bottom:24px;padding-top:8px;">
-        <input type="hidden" id="share-hospital-id">
-        <button class="btn-transfer import" onclick="executeSystemShare()" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;font-size:14px;font-weight:700;border-radius:12px;background:#f5ede0;color:var(--text-dark);border:1px solid rgba(44,36,24,0.15);">
-          <span>📢</span> 外部アプリで共有 (AirDrop/LINE等)
-        </button>
-        <button class="btn-transfer export" onclick="executeTextCopyShare()" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;font-size:14px;font-weight:700;border-radius:12px;background:#96a28e;color:white;border:none;">
-          <span>📋</span> コピペ（情報をクリップボードに保存）
-        </button>
       </div>
     </div>
   </div>

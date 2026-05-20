@@ -102,7 +102,7 @@ function closeSurvey() { showScreen('screen-detail','back'); }
 
 // ========== ユーティリティ ==========
 function escHtml(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s||'').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"');
 }
 function calcAge(bday) {
   if (!bday) return null;
@@ -862,6 +862,9 @@ let currentMedicalFilter = 'all';
 let tempMedicalPhoto = null;
 let tempCertPhoto = null;
 
+let careCalendarYear = new Date().getFullYear();
+let careCalendarMonth = new Date().getMonth();
+
 // ペットデータの新規フィールドを安全に確保する後方互換用関数
 function ensurePetHospitalFields(pet) {
   if (!pet.weightHistory) pet.weightHistory = [];
@@ -909,6 +912,10 @@ function openHospitalRecords(petId) {
   document.getElementById('hospital-header-title').textContent = `${pet.name}の病院記録・ケア`;
   showScreen('screen-hospital-records');
   
+  // カレンダーの初期化
+  careCalendarYear = today.getFullYear();
+  careCalendarMonth = today.getMonth();
+
   // 各タブ要素の初期描画
   switchHospitalTab('care-weight');
   
@@ -920,6 +927,7 @@ function openHospitalRecords(petId) {
   renderCertificates();
   renderMedicineCareSection();
   renderMedicineListMaster();
+  renderCareCalendar();
 }
 
 // 統合画面からペット詳細画面に戻る
@@ -962,14 +970,90 @@ function switchHospitalTab(tabId) {
     drawWeightGraph();
     renderQuickCares();
     renderMedicineCareSection();
+    renderCareCalendar();
   } else if (tabId === 'medicine-tab') {
     renderMedicineListMaster();
   }
 }
 
+// ==========================================
+// 日常ケアカレンダーのロジック
+// ==========================================
+function changeCareCalendarMonth(delta) {
+  careCalendarMonth += delta;
+  if (careCalendarMonth < 0) {
+    careCalendarMonth = 11;
+    careCalendarYear--;
+  } else if (careCalendarMonth > 11) {
+    careCalendarMonth = 0;
+    careCalendarYear++;
+  }
+  renderCareCalendar();
+}
+
+function renderCareCalendar() {
+  const container = document.getElementById('care-calendar-container');
+  const label = document.getElementById('care-calendar-month-label');
+  if (!container || !label) return;
+
+  label.textContent = `${careCalendarYear}年${careCalendarMonth + 1}月`;
+
+  const data = loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  ensurePetHospitalFields(pet);
+
+  const daysInMonth = new Date(careCalendarYear, careCalendarMonth + 1, 0).getDate();
+  const firstDay = new Date(careCalendarYear, careCalendarMonth, 1).getDay();
+
+  let html = '<div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-size:11px;">';
+  const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+  dayNames.forEach(d => {
+    html += `<div style="font-weight:700; color:var(--text-light); padding:4px 0;">${d}</div>`;
+  });
+
+  for (let i = 0; i < firstDay; i++) {
+    html += '<div></div>';
+  }
+
+  const tDate = new Date();
+  const tStr = `${tDate.getFullYear()}-${String(tDate.getMonth()+1).padStart(2,'0')}-${String(tDate.getDate()).padStart(2,'0')}`;
+  
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${careCalendarYear}-${String(careCalendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    
+    const quickCares = pet.quickCares[dateStr] || {};
+    const medicineLogs = pet.medicineLogs[dateStr] || {};
+    const hasMedicine = Object.keys(medicineLogs).length > 0;
+
+    let icons = '';
+    if (quickCares.nail) icons += '<span style="font-size:10px;">💅</span>';
+    if (quickCares.tooth) icons += '<span style="font-size:10px;">🪥</span>';
+    if (quickCares.flea) icons += '<span style="font-size:10px;">🛡️</span>';
+    if (hasMedicine) icons += '<span style="font-size:10px;">💊</span>';
+
+    const isToday = (dateStr === tStr);
+    const bg = isToday ? 'background:rgba(200,132,74,0.1); border-radius:6px;' : '';
+    const color = isToday ? 'color:var(--accent); font-weight:800;' : 'color:var(--text-dark);';
+
+    html += `
+      <div style="min-height:40px; display:flex; flex-direction:column; align-items:center; padding:4px 2px; border:1px solid rgba(44,36,24,0.05); border-radius:6px; ${bg}">
+        <span style="${color}">${day}</span>
+        <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:1px; margin-top:2px; line-height:1;">
+          ${icons}
+        </div>
+      </div>
+    `;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+
 function onQuickCareDateChange() {
   renderQuickCares();
   renderMedicineCareSection();
+  renderCareCalendar();
 }
 
 function renderQuickCares() {
@@ -1026,6 +1110,7 @@ function toggleQuickCare(type) {
   saveData(data);
   
   renderQuickCares();
+  renderCareCalendar();
   
   const labelMap = { nail: '爪切り', tooth: '歯磨き', flea: 'ノミ・ダニ予防' };
   showToast(`${labelMap[type]}を${nextVal ? '完了にしました' : '未完了にしました'}`);
@@ -1314,7 +1399,7 @@ function renderHospitalMaster() {
             ${hosp.address ? `
               <div class="hospital-detail-row">
                 <span class="hospital-detail-icon">📍</span>
-                <span class="hospital-detail-val link" onclick="window.open('https://maps.google.com/?q=${encodeURIComponent(hosp.address)}', '_blank')">${escHtml(hosp.address)} (地図)</span>
+                <span class="hospital-detail-val link" onclick="window.open('https://maps.google.com/?q=$${encodeURIComponent(hosp.address)}', '_blank')">${escHtml(hosp.address)} (地図)</span>
               </div>` : ''}
             ${hosp.doctor ? `
               <div class="hospital-detail-row">
@@ -1327,7 +1412,6 @@ function renderHospitalMaster() {
             <p class="issue-memo-label">特色・印象（病院メモ）</p>
             <div class="hospital-memo-box">${escHtml(hosp.memo)}</div>` : ''}
             
-          <!-- 料金表セクション -->
           ${hosp.priceList && hosp.priceList.length > 0 ? `
             <div class="hospital-price-list-wrap">
               <p class="issue-memo-label">🩺 主な治療・検査の料金目安</p>
@@ -1341,7 +1425,6 @@ function renderHospitalMaster() {
               </table>
             </div>` : ''}
              
-          <!-- 逆引き治療履歴セクション -->
           <div class="hospital-reverse-records">
             <div class="hospital-rev-title">🏥 治療実績とクチコミ（逆引き一覧）</div>
             <div class="hospital-stats-box">
@@ -1353,7 +1436,7 @@ function renderHospitalMaster() {
           </div>
           
           <div class="hospital-actions-bar">
-            <button class="hospital-act-btn share" onclick="shareHospital('${hosp.id}')">📢 シェア</button>
+            <button class="hospital-act-btn share" onclick="shareHospital('${hosp.id}')">📋 コピーして共有</button>
             <button class="hospital-act-btn edit" onclick="openHospitalModal('${hosp.id}')">✏️ 編集</button>
             <button class="hospital-act-btn delete" onclick="deleteHospitalRecord('${hosp.id}')">✕ 削除</button>
           </div>
@@ -1514,7 +1597,7 @@ function generateHospitalShareText(hosp) {
   if (hosp.phone) shareText += `📞 電話: ${hosp.phone}\n`;
   if (hosp.address) {
     shareText += `📍 住所: ${hosp.address}\n`;
-    shareText += `🗺️ マップ: https://maps.google.com/?q=${encodeURIComponent(hosp.address)}\n`;
+    shareText += `🗺️ マップ: https://maps.google.com/?q=$${encodeURIComponent(hosp.address)}\n`;
   }
   if (hosp.doctor) shareText += `👨‍⚕️ 担当医: ${hosp.doctor}\n`;
   if (hosp.memo) shareText += `📝 メモ: ${hosp.memo}\n`;
@@ -1530,53 +1613,7 @@ function generateHospitalShareText(hosp) {
   return shareText;
 }
 
-// ワンタップシェア機能 (共有モーダル起動)
-let currentShareHospitalId = null;
-
-function shareHospital(hospitalId) {
-  currentShareHospitalId = hospitalId;
-  const data = loadData();
-  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
-  if (!pet) return;
-  
-  const hosp = pet.hospitals.find(h => h.id === hospitalId);
-  if (!hosp) return;
-  
-  document.getElementById('share-hosp-name').textContent = hosp.name;
-  document.getElementById('modal-share-sheet').classList.add('open');
-}
-
-function executeSystemShare() {
-  if (!currentShareHospitalId) return;
-  
-  const data = loadData();
-  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
-  if (!pet) return;
-  
-  const hosp = pet.hospitals.find(h => h.id === currentShareHospitalId);
-  if (!hosp) return;
-  
-  const text = generateHospitalShareText(hosp);
-  
-  if (navigator.share) {
-    navigator.share({
-      title: `${hosp.name} の紹介`,
-      text: text
-    }).then(() => {
-      closeModal(null, 'modal-share-sheet');
-      showToast('共有しました ✓');
-    }).catch(err => {
-      // ユーザーによるキャンセル（AbortError）以外の場合はコピーへフォールバック
-      if (err && err.name !== 'AbortError') {
-        executeTextCopyShare();
-      }
-    });
-  } else {
-    // navigator.share が使えないPC環境などの場合はコピペ（クリップボード保存）を自動的に実行
-    executeTextCopyShare();
-  }
-}
-
+// コピペ処理（フォールバック用）
 function fallbackCopyTextToClipboard(text) {
   const textArea = document.createElement("textarea");
   textArea.value = text;
@@ -1593,7 +1630,6 @@ function fallbackCopyTextToClipboard(text) {
   try {
     const successful = document.execCommand('copy');
     if (successful) {
-      closeModal(null, 'modal-share-sheet');
       showToast('病院情報をコピーしました！LINE等に貼り付けられます ✓');
     } else {
       alert('コピーに失敗しました。お手数ですが手動でコピーしてください。');
@@ -1605,21 +1641,19 @@ function fallbackCopyTextToClipboard(text) {
   document.body.removeChild(textArea);
 }
 
-function executeTextCopyShare() {
-  if (!currentShareHospitalId) return;
-  
+// ワンタップシェア機能（直接クリップボードにコピー）
+function shareHospital(hospitalId) {
   const data = loadData();
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
   if (!pet) return;
   
-  const hosp = pet.hospitals.find(h => h.id === currentShareHospitalId);
+  const hosp = pet.hospitals.find(h => h.id === hospitalId);
   if (!hosp) return;
   
   const text = generateHospitalShareText(hosp);
   
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      closeModal(null, 'modal-share-sheet');
       showToast('病院情報をコピーしました！LINE等に貼り付けられます ✓');
     }).catch(() => {
       fallbackCopyTextToClipboard(text);
@@ -1699,6 +1733,15 @@ function renderMedicalTimeline() {
       const icon = rec.type === 'vaccine' ? '💉' : '🏥';
       const iconClass = rec.type === 'vaccine' ? 'vaccine-type' : '';
       
+      let caresList = [];
+      if (rec.cares) {
+        if (rec.cares.nail) caresList.push('💅爪切り');
+        if (rec.cares.tooth) caresList.push('🪥歯磨き');
+        if (rec.cares.flea) caresList.push('🛡️ノミダニ');
+      }
+      const caresHtml = caresList.length > 0 ? `<div class="timeline-item-meta" style="color:var(--text-dark); font-weight:700;">日常ケア：${caresList.join('、')}</div>` : '';
+      const weightHtml = rec.weight ? `<div class="timeline-item-meta" style="color:var(--text-dark); font-weight:700;">体重：${rec.weight} kg</div>` : '';
+
       return `
         <div class="timeline-item">
           <div class="timeline-item-icon ${iconClass}">${icon}</div>
@@ -1708,7 +1751,9 @@ function renderMedicalTimeline() {
               ${rec.cost ? `<span class="timeline-item-cost">${Number(rec.cost).toLocaleString()} 円</span>` : ''}
             </div>
             ${rec.doctor ? `<div class="timeline-item-meta">担当医：${escHtml(rec.doctor)}</div>` : ''}
-            
+            ${weightHtml}
+            ${caresHtml}
+
             ${rec.vaccineName ? `
               <div class="vaccine-info-pill" style="margin-top:6px; display:inline-block; background:rgba(200, 132, 74, 0.08); padding:4px 8px; border-radius:8px; font-size:12px; font-weight:700; color:var(--accent)">
                 🛡️ 接種・検査：${escHtml(rec.vaccineName)}
@@ -2058,6 +2103,7 @@ function saveMedicalRecord() {
   renderHospitalMaster(); // 逆引き一覧の再更新用
   renderQuickCares();     // 同期した日常ケアの即時反映
   renderWeightSection();  // 体重グラフ等の即時反映
+  renderCareCalendar();   // カレンダーの同期
   showToast(id ? '記録を更新しました ✓' : '通院記録を保存しました ✓');
 }
 
@@ -2561,6 +2607,7 @@ function changeMedicineCount(medId, delta, event) {
   saveData(data);
   
   renderMedicineCareSection();
+  renderCareCalendar();
   if (delta > 0) {
     showToast('服用を記録しました ✓');
   } else {
@@ -2927,4 +2974,3 @@ function showToast(msg){
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
-
