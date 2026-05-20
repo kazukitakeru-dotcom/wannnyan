@@ -18,6 +18,13 @@ function loadData() {
 }
 function saveData(data) { localStorage.setItem('wannyan_v2', JSON.stringify(data)); }
 
+// ========== 共通病院データ（全ペット共通） ==========
+function loadHospitals() {
+  try { return JSON.parse(localStorage.getItem('wannyan_hospitals_v1') || '[]'); }
+  catch(e) { return []; }
+}
+function saveHospitals(list) { localStorage.setItem('wannyan_hospitals_v1', JSON.stringify(list)); }
+
 // ========== 問題定義 ==========
 const ISSUES = {
   dog: [
@@ -861,6 +868,8 @@ let currentHospitalTab = 'care-weight';
 let currentMedicalFilter = 'all';
 let tempMedicalPhoto = null;
 let tempCertPhoto = null;
+let hospitalSortMode = 'custom'; // 'recent' | 'name' | 'custom'
+let medicineSortModeActive = false; // 本日のお薬チェック並び替えモード
 
 let careCalendarYear = new Date().getFullYear();
 let careCalendarMonth = new Date().getMonth();
@@ -869,17 +878,31 @@ let careCalendarMonth = new Date().getMonth();
 function ensurePetHospitalFields(pet) {
   if (!pet.weightHistory) pet.weightHistory = [];
   if (!pet.quickCares) pet.quickCares = {};
-  if (!pet.hospitals) pet.hospitals = [];
   if (!pet.medicalRecords) pet.medicalRecords = [];
   if (!pet.certificates) pet.certificates = {};
   if (!pet.medicines) pet.medicines = [];
   if (!pet.medicineLogs) pet.medicineLogs = {};
   
-  pet.hospitals.forEach(h => {
-    if (!h.priceList) h.priceList = [];
-  });
+  // 旧データ移行: pet.hospitals があれば共通ストアに移す
+  if (pet.hospitals && pet.hospitals.length > 0) {
+    const shared = loadHospitals();
+    const sharedIds = new Set(shared.map(h => h.id));
+    pet.hospitals.forEach(h => {
+      if (!h.priceList) h.priceList = [];
+      if (!sharedIds.has(h.id)) shared.push(h);
+    });
+    saveHospitals(shared);
+    delete pet.hospitals;
+  }
   
   return pet;
+}
+
+// 共通病院一覧のヘルパー
+function getHospitals() {
+  const list = loadHospitals();
+  list.forEach(h => { if (!h.priceList) h.priceList = []; });
+  return list;
 }
 
 // 病院記録＆ケア統合画面を開く
@@ -927,7 +950,8 @@ function openHospitalRecords(petId) {
   renderCertificates();
   renderMedicineCareSection();
   renderMedicineListMaster();
-  renderCareCalendar();
+  // カレンダーは画面遷移アニメーション完了後に描画
+  setTimeout(() => renderCareCalendar(), 400);
 }
 
 // 統合画面からペット詳細画面に戻る
@@ -1351,8 +1375,30 @@ function renderHospitalMaster() {
   ensurePetHospitalFields(pet);
   
   const container = document.getElementById('hospital-master-list');
-  if (pet.hospitals.length === 0) {
-    container.innerHTML = `
+  let hospitals = getHospitals();
+  
+  // 並び替え
+  if (hospitalSortMode === 'name') {
+    hospitals = [...hospitals].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
+  } else if (hospitalSortMode === 'recent') {
+    hospitals = [...hospitals].sort((a, b) => {
+      const lastA = pet.medicalRecords.filter(r => r.hospitalId === a.id).map(r => r.date).sort().reverse()[0] || '';
+      const lastB = pet.medicalRecords.filter(r => r.hospitalId === b.id).map(r => r.date).sort().reverse()[0] || '';
+      return lastB.localeCompare(lastA);
+    });
+  }
+  
+  const sortBarHtml = `
+    <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; align-items:center;">
+      <span style="font-size:11px; font-weight:700; color:var(--text-light);">並び替え：</span>
+      <button class="sort-btn ${hospitalSortMode==='recent'?'active':''}" onclick="setHospitalSort('recent')">最近利用順</button>
+      <button class="sort-btn ${hospitalSortMode==='name'?'active':''}" onclick="setHospitalSort('name')">名前順</button>
+      <button class="sort-btn ${hospitalSortMode==='custom'?'active':''}" onclick="setHospitalSort('custom')">手動並び替え</button>
+    </div>
+  `;
+  
+  if (hospitals.length === 0) {
+    container.innerHTML = sortBarHtml + `
       <div class="empty-state" style="padding:40px 20px">
         <div style="font-size:44px;margin-bottom:12px">🏢</div>
         <p>登録されている病院がありません<br>「病院を登録する」ボタンから追加してください</p>
@@ -1361,15 +1407,13 @@ function renderHospitalMaster() {
     return;
   }
   
-  container.innerHTML = pet.hospitals.map(hosp => {
-    // 逆引き集計 (その病院での「過去の治療値段・平均費用」や「クチコミ(メモ)」)
+  container.innerHTML = sortBarHtml + hospitals.map((hosp, idx) => {
     const records = pet.medicalRecords.filter(r => r.hospitalId === hosp.id);
     const costs = records.map(r => Number(r.cost || 0)).filter(c => c > 0);
     const averageCost = costs.length > 0 
       ? Math.round(costs.reduce((sum, val) => sum + val, 0) / costs.length)
       : 0;
     
-    // クチコミ逆引き
     const reviewRecords = records.filter(r => (r.notes || '').trim() !== '');
     const reviewListHtml = reviewRecords.length > 0
       ? reviewRecords.map(r => `
@@ -1383,11 +1427,21 @@ function renderHospitalMaster() {
         `).join('')
       : '<div class="cert-photo-empty" style="padding:6px 0">診療メモがありません</div>';
 
+    const orderBtns = hospitalSortMode === 'custom' ? `
+      <div style="display:flex; gap:4px; align-items:center;" onclick="event.stopPropagation()">
+        <button class="med-order-btn" onclick="moveHospitalOrder('${hosp.id}', -1)" ${idx===0?'disabled':''}>▲</button>
+        <button class="med-order-btn" onclick="moveHospitalOrder('${hosp.id}', 1)" ${idx===hospitals.length-1?'disabled':''}>▼</button>
+      </div>
+    ` : '';
+
     return `
       <div class="hospital-card" id="hosp-card-${hosp.id}">
         <div class="hospital-card-header" onclick="toggleHospitalCard('${hosp.id}')">
           <span class="hospital-card-title">🏢 ${escHtml(hosp.name)}</span>
-          <span class="hospital-card-arrow">▶</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${orderBtns}
+            <span class="hospital-card-arrow">▶</span>
+          </div>
         </div>
         <div class="hospital-card-body">
           <div class="hospital-card-details">
@@ -1399,7 +1453,7 @@ function renderHospitalMaster() {
             ${hosp.address ? `
               <div class="hospital-detail-row">
                 <span class="hospital-detail-icon">📍</span>
-                <span class="hospital-detail-val link" onclick="window.open('https://maps.google.com/?q=$${encodeURIComponent(hosp.address)}', '_blank')">${escHtml(hosp.address)} (地図)</span>
+                <span class="hospital-detail-val link" onclick="window.open('https://maps.google.com/?q=${encodeURIComponent(hosp.address)}', '_blank')">${escHtml(hosp.address)} (地図)</span>
               </div>` : ''}
             ${hosp.doctor ? `
               <div class="hospital-detail-row">
@@ -1446,6 +1500,24 @@ function renderHospitalMaster() {
   }).join('');
 }
 
+function setHospitalSort(mode) {
+  hospitalSortMode = mode;
+  renderHospitalMaster();
+}
+
+function moveHospitalOrder(hospId, direction) {
+  const hospitals = getHospitals();
+  const idx = hospitals.findIndex(h => h.id === hospId);
+  if (idx === -1) return;
+  const targetIdx = idx + direction;
+  if (targetIdx < 0 || targetIdx >= hospitals.length) return;
+  const temp = hospitals[idx];
+  hospitals[idx] = hospitals[targetIdx];
+  hospitals[targetIdx] = temp;
+  saveHospitals(hospitals);
+  renderHospitalMaster();
+}
+
 function toggleHospitalCard(id) {
   const card = document.getElementById(`hosp-card-${id}`);
   if (card) card.classList.toggle('open');
@@ -1469,7 +1541,7 @@ function openHospitalModal(hospitalId = null) {
     const data = loadData();
     const pet = (data[currentType] || []).find(p => p.id === currentPetId);
     if (pet) {
-      const hosp = pet.hospitals.find(h => h.id === hospitalId);
+      const hosp = getHospitals().find(h => h.id === hospitalId);
       if (hosp) {
         document.getElementById('h-name').value = hosp.name;
         document.getElementById('h-phone').value = hosp.phone || '';
@@ -1511,6 +1583,7 @@ function addPriceEditRow(name = '', price = '') {
 }
 
 function removePriceEditRow(rowId) {
+  if (!confirm('この料金メニューを削除しますか？')) return;
   const row = document.getElementById(rowId);
   if (row) row.remove();
 }
@@ -1554,16 +1627,14 @@ function saveHospitalRecord() {
     priceList
   };
   
+  const hospitals = getHospitals();
   if (id) {
-    const hIdx = pet.hospitals.findIndex(h => h.id === id);
-    if (hIdx !== -1) pet.hospitals[hIdx] = hospData;
+    const hIdx = hospitals.findIndex(h => h.id === id);
+    if (hIdx !== -1) hospitals[hIdx] = hospData;
   } else {
-    pet.hospitals.push(hospData);
+    hospitals.push(hospData);
   }
-  
-  pets[idx] = pet;
-  data[currentType] = pets;
-  saveData(data);
+  saveHospitals(hospitals);
   
   closeModal(null, 'modal-hospital');
   renderHospitalMaster();
@@ -1579,37 +1650,20 @@ function deleteHospitalRecord(hospitalId) {
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
   
-  const pet = ensurePetHospitalFields(pets[idx]);
-  pet.hospitals = pet.hospitals.filter(h => h.id !== hospitalId);
+  ensurePetHospitalFields(pets[idx]);
   
-  pets[idx] = pet;
-  data[currentType] = pets;
-  saveData(data);
+  const hospitals = getHospitals().filter(h => h.id !== hospitalId);
+  saveHospitals(hospitals);
   
   renderHospitalMaster();
   showToast('病院を削除しました');
 }
 
-// 共有用テキスト自動生成ヘルパー
+// 共有用テキスト自動生成ヘルパー（シンプル形式：病院名・電話・住所のみ）
 function generateHospitalShareText(hosp) {
-  let shareText = `【おすすめの動物病院】\n`;
-  shareText += `🏥 病院名: ${hosp.name}\n`;
-  if (hosp.phone) shareText += `📞 電話: ${hosp.phone}\n`;
-  if (hosp.address) {
-    shareText += `📍 住所: ${hosp.address}\n`;
-    shareText += `🗺️ マップ: https://maps.google.com/?q=$${encodeURIComponent(hosp.address)}\n`;
-  }
-  if (hosp.doctor) shareText += `👨‍⚕️ 担当医: ${hosp.doctor}\n`;
-  if (hosp.memo) shareText += `📝 メモ: ${hosp.memo}\n`;
-  
-  if (hosp.priceList && hosp.priceList.length > 0) {
-    shareText += `\n🩺 主な治療・検査の料金目安:\n`;
-    hosp.priceList.forEach(p => {
-      shareText += ` ・ ${p.name}: ${Number(p.price).toLocaleString()}円\n`;
-    });
-  }
-  
-  shareText += `\n（わんにゃんメモリー より共有）`;
+  let shareText = `${hosp.name}`;
+  if (hosp.phone) shareText += `\n${hosp.phone}`;
+  if (hosp.address) shareText += `\n${hosp.address}`;
   return shareText;
 }
 
@@ -1647,7 +1701,7 @@ function shareHospital(hospitalId) {
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
   if (!pet) return;
   
-  const hosp = pet.hospitals.find(h => h.id === hospitalId);
+  const hosp = getHospitals().find(h => h.id === hospitalId);
   if (!hosp) return;
   
   const text = generateHospitalShareText(hosp);
@@ -1728,7 +1782,7 @@ function renderMedicalTimeline() {
     const yearRecords = groups[year];
     
     const recordsHtml = yearRecords.map(rec => {
-      const hosp = pet.hospitals.find(h => h.id === rec.hospitalId);
+      const hosp = getHospitals().find(h => h.id === rec.hospitalId);
       const hospName = hosp ? hosp.name : '不明な病院';
       const icon = rec.type === 'vaccine' ? '💉' : '🏥';
       const iconClass = rec.type === 'vaccine' ? 'vaccine-type' : '';
@@ -1809,8 +1863,9 @@ function openMedicalRecordModal(recordId = null) {
   
   // 病院のセレクトボックスの構築
   const select = document.getElementById('m-hospital-select');
+  const sharedHospitals = getHospitals();
   select.innerHTML = '<option value="">-- 選択してください --</option>' + 
-    pet.hospitals.map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
+    sharedHospitals.map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
   
   // 各自フィールドの初期化
   document.getElementById('edit-medical-id').value = recordId || '';
@@ -1931,7 +1986,7 @@ function openMedicalRecordModal(recordId = null) {
       const latest = sorted[0];
       
       // セレクトボックスに該当病院が存在すればセット
-      if (pet.hospitals.some(h => h.id === latest.hospitalId)) {
+      if (getHospitals().some(h => h.id === latest.hospitalId)) {
         select.value = latest.hospitalId;
         document.getElementById('m-doctor').value = latest.doctor || '';
       }
@@ -1978,7 +2033,7 @@ function onMedicalHospitalChange() {
   const data = loadData();
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
   if (pet) {
-    const hosp = pet.hospitals.find(h => h.id === hospId);
+    const hosp = getHospitals().find(h => h.id === hospId);
     if (hosp && hosp.doctor) {
       document.getElementById('m-doctor').value = hosp.doctor;
     }
@@ -2448,7 +2503,7 @@ function saveCertificateRecord() {
       id: 'med_' + Date.now(),
       date,
       type: 'vaccine',
-      hospitalId: pet.hospitals[0] ? pet.hospitals[0].id : '',
+      hospitalId: getHospitals()[0] ? getHospitals()[0].id : '',
       doctor: '',
       cost: '',
       notes: syncNotes,
@@ -2524,6 +2579,18 @@ function calculateAgeAtDate(birthdayStr, targetDateStr) {
   return `${years}歳${months}ヶ月`;
 }
 
+// 本日のお薬チェックの並び替えモードをトグル
+function toggleMedicineSortMode() {
+  medicineSortModeActive = !medicineSortModeActive;
+  const btn = document.getElementById('medicine-sort-mode-btn');
+  if (btn) {
+    btn.textContent = medicineSortModeActive ? '✓ 完了' : '↕ 並び替え';
+    btn.style.background = medicineSortModeActive ? 'rgba(200,132,74,0.15)' : '';
+    btn.style.color = medicineSortModeActive ? 'var(--accent)' : '';
+  }
+  renderMedicineCareSection();
+}
+
 // 日常ケアのお薬服用カウンターセクションの描画（服用中のお薬のみ表示）
 function renderMedicineCareSection() {
   const data = loadData();
@@ -2538,7 +2605,6 @@ function renderMedicineCareSection() {
   const dateStr = document.getElementById('quick-care-date').value;
   if (!dateStr) return;
   
-  // ステータスが服用中（active、または未定義=デフォルト服用中）のお薬に絞り込む
   const activeMedicines = pet.medicines.filter(med => (med.status || 'active') === 'active');
   
   if (activeMedicines.length === 0) {
@@ -2550,29 +2616,44 @@ function renderMedicineCareSection() {
     return;
   }
   
-  // 対象日の服用ログを取得
   const dayLogs = pet.medicineLogs[dateStr] || {};
   
   container.innerHTML = activeMedicines.map((med, index) => {
     const count = dayLogs[med.id] || 0;
-    return `
-      <div class="med-care-item" style="position: relative;">
-        <button class="med-care-btn ${count > 0 ? 'completed' : ''}" onclick="showMedicineDetailModal('${med.id}')">
-          <div class="med-care-icon">💊</div>
-          <div class="med-care-name">${escHtml(med.name)}</div>
-          <div class="med-care-dosage">${escHtml(med.dosage || med.usage || '用量未設定')}</div>
-          <div class="med-care-counter-val">${count} 回服用</div>
-        </button>
-        <div class="med-care-actions">
-          <button class="med-care-act-btn plus" onclick="changeMedicineCount('${med.id}', 1, event)" title="1回分追加">＋</button>
-          ${count > 0 ? `<button class="med-care-act-btn minus" onclick="changeMedicineCount('${med.id}', -1, event)" title="1回分取り消し">ー</button>` : ''}
+    
+    if (medicineSortModeActive) {
+      // 並び替えモード: カウンターボタン非表示、▲▼を大きく表示
+      return `
+        <div class="med-care-item" style="position: relative; opacity: 0.9;">
+          <div class="med-care-btn" style="cursor:default; background:rgba(200,132,74,0.05); border:2px dashed rgba(200,132,74,0.3);">
+            <div class="med-care-icon">💊</div>
+            <div class="med-care-name">${escHtml(med.name)}</div>
+            <div class="med-care-dosage">${escHtml(med.dosage || med.usage || '用量未設定')}</div>
+            <div style="font-size:11px; color:var(--accent); font-weight:700; margin-top:4px;">並び替えモード</div>
+          </div>
+          <div class="med-care-actions" style="display:flex; flex-direction:row; gap:6px; margin-top:4px; justify-content:center;">
+            <button class="med-care-act-btn plus" onclick="moveMedicineOrder('${med.id}', -1, true)" ${index===0?'disabled':''} style="flex:1; font-size:14px;">▲</button>
+            <button class="med-care-act-btn plus" onclick="moveMedicineOrder('${med.id}', 1, true)" ${index===activeMedicines.length-1?'disabled':''} style="flex:1; font-size:14px;">▼</button>
+          </div>
         </div>
-        <div class="med-care-order-btns" style="position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 2px; z-index: 10;">
-          <button class="med-care-order-btn" onclick="event.stopPropagation(); moveMedicineOrder('${med.id}', -1, true)" ${index === 0 ? 'disabled' : ''} style="border: none; background: rgba(44,36,24,0.06); color: var(--text-dark); border-radius: 4px; padding: 2px; font-size: 8px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: ${index === 0 ? 0.3 : 1};" title="上に移動">▲</button>
-          <button class="med-care-order-btn" onclick="event.stopPropagation(); moveMedicineOrder('${med.id}', 1, true)" ${index === activeMedicines.length - 1 ? 'disabled' : ''} style="border: none; background: rgba(44,36,24,0.06); color: var(--text-dark); border-radius: 4px; padding: 2px; font-size: 8px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: ${index === activeMedicines.length - 1 ? 0.3 : 1};" title="下に移動">▼</button>
+      `;
+    } else {
+      // 通常モード
+      return `
+        <div class="med-care-item" style="position: relative;">
+          <button class="med-care-btn ${count > 0 ? 'completed' : ''}" onclick="showMedicineDetailModal('${med.id}')">
+            <div class="med-care-icon">💊</div>
+            <div class="med-care-name">${escHtml(med.name)}</div>
+            <div class="med-care-dosage">${escHtml(med.dosage || med.usage || '用量未設定')}</div>
+            <div class="med-care-counter-val">${count} 回服用</div>
+          </button>
+          <div class="med-care-actions">
+            <button class="med-care-act-btn plus" onclick="changeMedicineCount('${med.id}', 1, event)" title="1回分追加">＋</button>
+            ${count > 0 ? `<button class="med-care-act-btn minus" onclick="changeMedicineCount('${med.id}', -1, event)" title="1回分取り消し">ー</button>` : ''}
+          </div>
         </div>
-      </div>
-    `;
+      `;
+    }
   }).join('');
 }
 

@@ -248,7 +248,10 @@
             </button>
           </div>
           
-          <p class="issue-memo-label" style="margin-top:14px; margin-bottom: 6px;">💊 本日のお薬チェック（タップで増加 / ーで減少）</p>
+          <p class="issue-memo-label" style="margin-top:14px; margin-bottom: 6px; display:flex; align-items:center; justify-content:space-between;">
+            <span>💊 本日のお薬チェック</span>
+            <button id="medicine-sort-mode-btn" onclick="toggleMedicineSortMode()" style="border:none; background:rgba(44,36,24,0.06); color:var(--text-dark); border-radius:8px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">↕ 並び替え</button>
+          </p>
           <div class="medicine-care-grid" id="medicine-care-grid">
             </div>
         </div>
