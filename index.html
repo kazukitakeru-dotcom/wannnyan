@@ -349,8 +349,11 @@
         <input type="tel" id="h-phone" class="field-input" placeholder="例: 03-1234-5678">
         <label class="field-label">住所 (マップ連動用)</label>
         <input type="text" id="h-address" class="field-input" placeholder="例: 東京都渋谷区南3丁目">
-        <label class="field-label">担当医 (何先生)</label>
-        <input type="text" id="h-doctor" class="field-input" placeholder="例: 山田先生">
+        <label class="field-label" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>👨‍⚕️ 担当医（複数登録可）</span>
+          <button type="button" onclick="addDoctorEditRow()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">＋ 追加</button>
+        </label>
+        <div id="hospital-doctor-editor" style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;"></div>
         <label class="field-label">病院の特色・印象 (メモ)</label>
         <textarea id="h-memo" class="field-input" rows="3" placeholder="夜間対応あり、優しい、日曜日開院など"></textarea>
 
@@ -391,8 +394,10 @@
         </select>
         <p class="field-age-note" style="margin-top:-6px;margin-bottom:6px">※先に「病院紹介」タブで病院を登録してください</p>
 
-        <label class="field-label">担当医 (何先生)</label>
-        <input type="text" id="m-doctor" class="field-input" placeholder="例: 山田先生">
+        <label class="field-label">担当医</label>
+        <div id="m-doctor-wrap">
+          <input type="text" id="m-doctor" class="field-input" placeholder="例: 山田先生">
+        </div>
 
         <label class="field-label">治療費・値段 (円)</label>
         <input type="number" id="m-cost" class="field-input" placeholder="例: 5400" min="0">
