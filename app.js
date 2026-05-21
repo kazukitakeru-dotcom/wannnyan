@@ -2255,7 +2255,35 @@ function saveMedicalRecord() {
     if (toothChecked) pet.quickCares[date].tooth = true;
     if (fleaChecked) pet.quickCares[date].flea = true;
   }
-  
+
+  // 【証明書への自動同期】ワクチン種別に応じて証明書側も更新
+  if (recType === 'vaccine' && vaccineName) {
+    let certKey = null;
+    if (vaccineName === '狂犬病予防注射') {
+      certKey = 'rabies';
+    } else if (vaccineName === '抗体価検査済') {
+      certKey = 'antibody';
+    } else if (vaccineName !== '') {
+      certKey = 'vaccine';
+    }
+
+    if (certKey) {
+      if (!pet.certificates) pet.certificates = {};
+      const existingCert = pet.certificates[certKey];
+      // 証明書が未登録、または同日付以前の場合のみ上書き（より新しい証明書は上書きしない）
+      if (!existingCert || existingCert.date <= date) {
+        const newCert = { date, photo: recData.photo || (existingCert ? existingCert.photo : null) };
+        if (certKey === 'vaccine') newCert.name = vaccineName;
+        if (certKey === 'antibody' && antibodyVals) {
+          newCert.abVal1 = antibodyVals.val1;
+          newCert.abVal2 = antibodyVals.val2;
+          newCert.abVal3 = antibodyVals.val3;
+        }
+        pet.certificates[certKey] = newCert;
+      }
+    }
+  }
+
   pets[idx] = pet;
   data[currentType] = pets;
   saveData(data);
@@ -2266,6 +2294,7 @@ function saveMedicalRecord() {
   renderQuickCares();     // 同期した日常ケアの即時反映
   renderWeightSection();  // 体重グラフ等の即時反映
   renderCareCalendar();   // カレンダーの同期
+  renderCertificates();   // 証明書側も即時反映
   showToast(id ? '記録を更新しました ✓' : '通院記録を保存しました ✓');
 }
 
@@ -2597,6 +2626,17 @@ function saveCertificateRecord() {
     syncNotes = '抗体価検査結果証明から同期登録';
   }
 
+  // 最新の通院記録から病院・担当医・体重を引き継ぐ
+  let inheritHospitalId = getHospitals()[0] ? getHospitals()[0].id : '';
+  let inheritDoctor = '';
+  let inheritWeight = '';
+  if (pet.medicalRecords.length > 0) {
+    const latestRec = [...pet.medicalRecords].sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (latestRec.hospitalId) inheritHospitalId = latestRec.hospitalId;
+    if (latestRec.doctor) inheritDoctor = latestRec.doctor;
+    if (latestRec.weight) inheritWeight = latestRec.weight;
+  }
+
   // 重複チェック (同じ日付かつ同じ種類のワクチン/予防記録があるか)
   let existingRec = pet.medicalRecords.find(r => r.date === date && r.type === 'vaccine' && r.vaccineName === syncName);
   
@@ -2610,17 +2650,26 @@ function saveCertificateRecord() {
       id: 'med_' + Date.now(),
       date,
       type: 'vaccine',
-      hospitalId: getHospitals()[0] ? getHospitals()[0].id : '',
-      doctor: '',
+      hospitalId: inheritHospitalId,
+      doctor: inheritDoctor,
       cost: '',
       notes: syncNotes,
       photo: certData.photo || null,
-      weight: '',
+      weight: inheritWeight,
       cares: { nail: false, tooth: false, flea: false },
       vaccineName: syncName,
       antibodyVals: syncAbVals
     };
     pet.medicalRecords.push(newMedRec);
+
+    // 引き継いだ体重を体重履歴にも同期
+    if (inheritWeight) {
+      const wVal = Number(inheritWeight);
+      const existingWIdx = pet.weightHistory.findIndex(w => w.date === date);
+      if (existingWIdx === -1) {
+        pet.weightHistory.push({ id: 'w_' + Date.now(), date, weight: wVal });
+      }
+    }
   }
   
   pets[idx] = pet;
