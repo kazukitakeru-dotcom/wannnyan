@@ -429,6 +429,7 @@ function compressAndLoad(file, callback) {
 }
 
 // インポートデータ内の既存base64 / 新規ファイルどちらも圧縮できる共通処理
+// ※通常の新規ファイル読み込み用（失敗時は元データを返す）
 function _compressFromDataUrl(src, callback) {
   const img=new Image();
   img.onload=()=>{
@@ -451,63 +452,85 @@ function _compressFromDataUrl(src, callback) {
   img.src=src;
 }
 
-// インポート時に壊れた画像データを修復してから保存する（Promise対応・完全非同期）
-// 旧バックアップデータで読み込めない画像はnullに置き換えて他のデータを守る
+// インポート専用：画像が現在のブラウザで実際に表示できるか検証し、
+// 表示できればJPEGに変換して返す。表示できない（旧非対応形式など）場合は null を返す。
+// これにより「当時対応していなかった壊れたデータ」がそのまま保存されるのを防ぐ。
+function _sanitizePhotoForImport(src, callback) {
+  if (!src || !src.startsWith('data:')) { callback(null); return; }
+
+  let settled = false;
+  // タイムアウト：5秒以内に読み込めなければ表示不可とみなしnullにする
+  const timer = setTimeout(() => {
+    if (!settled) { settled = true; callback(null); }
+  }, 5000);
+
+  const img = new Image();
+  img.onload = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+
+    // 実際に描画できるか確認（幅・高さが0ならデコード失敗）
+    if (!img.width || !img.height) { callback(null); return; }
+
+    const MAX = 1400;
+    let w = img.width, h = img.height;
+    if (w > MAX || h > MAX) { const r = Math.min(MAX/w, MAX/h); w = Math.round(w*r); h = Math.round(h*r); }
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    try {
+      ctx.drawImage(img, 0, 0, w, h);
+      const out = canvas.toDataURL('image/jpeg', 0.85);
+      // 変換結果が有効なJPEGデータかチェック
+      callback((out && out.startsWith('data:image/jpeg') && out.length > 200) ? out : null);
+    } catch(_) {
+      // SecurityErrorなど描画できない場合もnull
+      callback(null);
+    }
+  };
+  // 読み込み失敗（非対応形式・壊れたデータ）→ null にクリアして新規設定できる状態にする
+  img.onerror = () => {
+    if (!settled) { settled = true; clearTimeout(timer); callback(null); }
+  };
+  img.src = src;
+}
+
+// インポート時に全写真データを検証・変換する（Promise対応・完全非同期）
+// 読み込めない写真はnullにクリアする（壊れたデータが残り続けるのを防ぐ）
 function sanitizeImportedPhotos(data) {
   const tasks = [];
   ['dog','cat'].forEach(type => {
     (data[type]||[]).forEach(pet => {
-      // ペットのメイン写真を修復（圧縮し直す）
-      if (pet.photo && pet.photo.startsWith('data:')) {
+      // ペットのメイン写真を検証
+      if (pet.photo) {
         tasks.push(new Promise(resolve => {
-          // タイムアウト付き：5秒で応答なければ元データを保持
-          let settled = false;
-          const timer = setTimeout(() => {
-            if (!settled) { settled = true; resolve(); }
-          }, 5000);
-          _compressFromDataUrl(pet.photo, fixed => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(timer);
-              // 圧縮結果が短すぎる（壊れている）場合はnullにせず元データを保持
-              pet.photo = (fixed && fixed.length > 200) ? fixed : pet.photo;
-              resolve();
-            }
+          _sanitizePhotoForImport(pet.photo, result => {
+            pet.photo = result; // 読み込めない場合はnull、読み込める場合はJPEG変換済みデータ
+            resolve();
           });
         }));
       }
-      // 通院記録の写真も同様に修復
+      // 通院記録の写真を検証
       (pet.medicalRecords||[]).forEach(rec => {
-        if (rec.photo && rec.photo.startsWith('data:')) {
+        if (rec.photo) {
           tasks.push(new Promise(resolve => {
-            let settled = false;
-            const timer = setTimeout(() => { if (!settled) { settled = true; resolve(); } }, 5000);
-            _compressFromDataUrl(rec.photo, fixed => {
-              if (!settled) {
-                settled = true;
-                clearTimeout(timer);
-                rec.photo = (fixed && fixed.length > 200) ? fixed : rec.photo;
-                resolve();
-              }
+            _sanitizePhotoForImport(rec.photo, result => {
+              rec.photo = result;
+              resolve();
             });
           }));
         }
       });
-      // 証明書写真の修復
+      // 証明書写真を検証
       if (pet.certificates) {
         Object.keys(pet.certificates).forEach(k => {
           const cert = pet.certificates[k];
-          if (cert && cert.photo && cert.photo.startsWith('data:')) {
+          if (cert && cert.photo) {
             tasks.push(new Promise(resolve => {
-              let settled = false;
-              const timer = setTimeout(() => { if (!settled) { settled = true; resolve(); } }, 5000);
-              _compressFromDataUrl(cert.photo, fixed => {
-                if (!settled) {
-                  settled = true;
-                  clearTimeout(timer);
-                  cert.photo = (fixed && fixed.length > 200) ? fixed : cert.photo;
-                  resolve();
-                }
+              _sanitizePhotoForImport(cert.photo, result => {
+                cert.photo = result;
+                resolve();
               });
             }));
           }
