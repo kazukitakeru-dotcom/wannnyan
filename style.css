@@ -1187,3 +1187,183 @@ a, button {
   font-weight: 700;
   color: var(--accent);
 }
+/* ========== 家族タグバー ========== */
+.family-tag-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 16px 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.family-tag-bar::-webkit-scrollbar { display: none; }
+
+.family-tag-chip {
+  flex-shrink: 0;
+  padding: 5px 14px;
+  background: var(--white);
+  border: 2px solid rgba(200,132,74,0.3);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-mid);
+  cursor: pointer;
+  /* マスキングテープ風の少し傾いたデザイン */
+  box-shadow: 1px 1px 0 rgba(200,132,74,0.18), inset 0 0 0 1px rgba(255,255,255,0.6);
+  transition: all 0.15s;
+  letter-spacing: 0.03em;
+}
+.family-tag-chip.active {
+  background: var(--accent);
+  color: var(--white);
+  border-color: var(--accent);
+  box-shadow: 2px 2px 6px rgba(200,132,74,0.35);
+}
+
+/* ペットカード写真ラップ（続柄スタンプ用） */
+.pet-card-photo-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.role-stamp {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  background: var(--accent);
+  color: var(--white);
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 20px;
+  box-shadow: 1px 1px 4px rgba(200,132,74,0.4);
+  transform: rotate(6deg);
+  white-space: nowrap;
+  border: 1px solid rgba(255,255,255,0.6);
+  letter-spacing: 0.02em;
+  z-index: 2;
+}
+.pet-card-family-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(200,132,74,0.1);
+  border-radius: 10px;
+  padding: 2px 8px;
+  margin-top: 3px;
+  display: inline-block;
+}
+
+/* ========== 散歩タイマー ========== */
+.walk-timer-display {
+  text-align: center;
+  padding: 16px 0 8px;
+}
+.walk-timer-elapsed {
+  font-size: 44px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.walk-timer-remain {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-mid);
+  margin-top: 6px;
+}
+.walk-timer-remain.over {
+  color: #e05050;
+  animation: pulse 0.8s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.walk-timer-start-btn {
+  background: var(--accent);
+  color: var(--white);
+  border: none;
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(200,132,74,0.35);
+  flex-shrink: 0;
+}
+.walk-timer-stop-btn {
+  display: block;
+  width: 100%;
+  background: rgba(220,80,80,0.1);
+  color: #c84040;
+  border: 2px solid rgba(220,80,80,0.25);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 10px;
+}
+.walk-env-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--cream);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 4px;
+}
+.walk-env-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-mid);
+}
+.walk-env-label { color: var(--text-light); }
+
+/* ========== 気になるメモ ========== */
+.pending-note-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--cream);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-left: 3px solid var(--accent);
+  gap: 8px;
+}
+.pending-note-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dark);
+  flex: 1;
+  line-height: 1.4;
+}
+.pending-note-del {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 2px;
+  opacity: 0.6;
+}
+.pending-note-del:hover { opacity: 1; }
+
+.pending-note-chip {
+  display: inline-block;
+  background: var(--white);
+  border: 1.5px solid rgba(200,132,74,0.35);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pending-note-chip.selected {
+  background: var(--accent);
+  color: var(--white);
+  border-color: var(--accent);
+}

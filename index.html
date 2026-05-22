@@ -63,6 +63,7 @@
           <button class="sort-btn" id="sort-date-btn" onclick="sortList('date')">記録日順</button>
         </div>
       </div>
+      <div id="family-tag-bar" class="family-tag-bar" style="display:none"></div>
       <div id="pet-list" class="pet-list"></div>
     </div>
 
@@ -292,6 +293,24 @@
             <span>💊 お薬</span>
           </div>
         </div>
+
+        <div class="detail-card" style="margin-top:14px;">
+          <div class="detail-card-title" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>🦮 散歩タイマー</span>
+            <button onclick="openWalkEnvModal()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">⚙️ 環境設定</button>
+          </div>
+          <div id="walk-timer-section"></div>
+        </div>
+
+        <div class="detail-card" style="margin-top:14px;">
+          <div class="detail-card-title">📝 気になるメモ（次回通院用）</div>
+          <p class="field-age-note" style="margin-bottom:6px;">追加したメモは通院記録画面に表示されます。通院記録で「外す」と戻ります。削除はワンステップ確認あり。</p>
+          <div id="pending-notes-list" style="margin-bottom:10px;"></div>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="pending-note-input" class="field-input" style="flex:1;margin-bottom:0" placeholder="次回聞くこと・気になること…">
+            <button class="btn-primary" style="padding:10px 14px;border-radius:10px;font-size:13px;white-space:nowrap;" onclick="addPendingNote(currentPetId)">追加</button>
+          </div>
+        </div>
       </div>
 
       <div id="tab-medical-history" class="hospital-tab-content">
@@ -301,6 +320,7 @@
             <button class="medical-filter-btn" onclick="filterMedicalTimeline('medical')">病院・医療</button>
             <button class="medical-filter-btn" onclick="filterMedicalTimeline('vaccine')">ワクチン・予防</button>
           </div>
+          <button class="btn-primary add-medical-btn" style="background:rgba(200,132,74,0.15);color:var(--accent);border:1.5px solid var(--accent);margin-bottom:6px;width:100%;font-size:13px;" onclick="openBulkMedicalModal()">🐾 複数頭にまとめて記録</button>
           <button class="btn-primary add-medical-btn" onclick="openMedicalRecordModal()">＋ 通院記録を追加</button>
         </div>
         
@@ -447,6 +467,12 @@
         </div>
 
         <label class="field-label">診療内容・症状メモ (自分だけの口コミ)</label>
+        
+        <div id="m-pending-notes-area" style="display:none; margin-bottom:8px; background:rgba(200,132,74,0.06); border-radius:10px; padding:10px; border:1px solid rgba(200,132,74,0.2);">
+          <p class="issue-memo-label" style="margin:0 0 6px 0">📝 次回通院用メモ（保存に含める場合はそのままに、外す場合は「外す」を押してください）</p>
+          <div id="m-pending-notes-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        </div>
+
         <textarea id="m-notes" class="field-input" rows="4" placeholder="例: 外耳炎の治療。薬を処方してもらった。"></textarea>
 
         <label class="field-label">明細書・領収書の写真</label>
@@ -588,6 +614,91 @@
       <div class="modal-footer" style="padding-top:0; display:flex; gap:10px;">
         <button class="btn-cancel" style="flex:1" onclick="closeModal(null,'modal-medicine-detail')">閉じる</button>
         <button class="btn-submit" style="flex:1; background:var(--accent); color:var(--white)" onclick="editMedicineFromDetail()">✏️ 編集する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-walk-env" class="modal-overlay" onclick="closeModal(event,'modal-walk-env')">
+    <div class="modal-box modal-box-tall">
+      <div class="modal-header">
+        <h3 class="modal-title">🦮 散歩・環境適応設定</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-walk-env')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="field-age-note" style="margin-bottom:12px">この設定はいつでも散歩前の天候チェック指標として確認できます。</p>
+
+        <div class="detail-card" style="margin-bottom:12px;padding:12px;">
+          <div class="detail-card-title" style="font-size:13px;">🚫 外出不可の気象基準</div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <div style="flex:1">
+              <label class="field-label">最高気温（℃以上）</label>
+              <input type="number" id="we-max-temp" class="field-input" placeholder="例: 32">
+            </div>
+            <div style="flex:1">
+              <label class="field-label">最低気温（℃以下）</label>
+              <input type="number" id="we-min-temp" class="field-input" placeholder="例: 0">
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-card" style="margin-bottom:12px;padding:12px;">
+          <div class="detail-card-title" style="font-size:13px;">👗 服を着るべき気温</div>
+          <div style="margin-top:8px;">
+            <label class="field-label">この気温以下になったら服を着る（℃）</label>
+            <input type="number" id="we-cloth-temp" class="field-input" placeholder="例: 10">
+          </div>
+        </div>
+
+        <div class="detail-card" style="margin-bottom:12px;padding:12px;">
+          <div class="detail-card-title" style="font-size:13px;">🧊 暑さ対策が必要な気温</div>
+          <div style="margin-top:8px;">
+            <label class="field-label">この気温以上で保冷剤など必要（℃）</label>
+            <input type="number" id="we-cool-temp" class="field-input" placeholder="例: 28">
+          </div>
+        </div>
+
+        <div class="detail-card" style="padding:12px;">
+          <div class="detail-card-title" style="font-size:13px;display:flex;justify-content:space-between;align-items:center;">
+            <span>⏱ 散歩目安時間</span>
+            <button type="button" onclick="addWalkTimeRow()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">＋ 追加</button>
+          </div>
+          <p class="field-age-note" style="margin-top:4px;margin-bottom:8px;">ラベルと時間を自由に設定できます（削除はワンステップ確認あり）</p>
+          <div id="we-walk-times-list" style="display:flex;flex-direction:column;gap:0;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal(null,'modal-walk-env')">キャンセル</button>
+        <button class="btn-primary" onclick="saveWalkEnv()">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-bulk-medical" class="modal-overlay" onclick="closeModal(event,'modal-bulk-medical')">
+    <div class="modal-box modal-box-tall">
+      <div class="modal-header">
+        <h3 class="modal-title">🐾 複数頭にまとめて通院記録</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-bulk-medical')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="field-age-note" style="margin-bottom:10px;">共通の日付・病院を設定し、各ペットごとに体重・ケア・メモを個別入力して一括保存できます。</p>
+
+        <label class="field-label">日付 <span class="required">*</span></label>
+        <input type="date" id="bulk-m-date" class="field-input">
+
+        <label class="field-label">病院 <span class="required">*</span></label>
+        <select id="bulk-m-hospital-select" class="field-input">
+          <option value="">-- 選択してください --</option>
+        </select>
+
+        <label class="field-label">治療費（共通・任意）</label>
+        <input type="number" id="bulk-m-cost" class="field-input" placeholder="例: 5400" min="0">
+
+        <p class="issue-memo-label" style="margin-top:10px;margin-bottom:6px;">対象のペット（タップで個別入力展開）</p>
+        <div id="bulk-pets-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal(null,'modal-bulk-medical')">キャンセル</button>
+        <button class="btn-primary" onclick="saveBulkMedicalRecord()">まとめて保存</button>
       </div>
     </div>
   </div>

@@ -10,6 +10,7 @@ let deletePendingId = null;
 let tempPhotoData = null;
 let breedSortMode = 'group';
 let breedCallback = null; // 犬種選択後のコールバック
+let currentFamilyTagFilter = null; // 家族タグフィルター
 
 // ========== Storage ==========
 function loadData() {
@@ -91,6 +92,7 @@ function applyTypeClass(type) {
 
 function selectType(type) {
   currentType = type;
+  currentFamilyTagFilter = null;
   applyTypeClass(type);
   document.getElementById('list-type-emoji').textContent = type==='dog'?'🐕':'🐈';
   document.getElementById('list-type-name').textContent  = type==='dog'?'いぬ':'ねこ';
@@ -140,16 +142,26 @@ function renderList() {
   const pets = data[currentType]||[];
   const rawSearch = document.getElementById('search-input').value.trim();
   const search = toHiragana(rawSearch).toLowerCase();
+
+  // 家族タグフィルター
   let filtered = search ? pets.filter(p=>
     toHiragana(p.name||'').toLowerCase().includes(search) ||
     toHiragana(p.breed||'').toLowerCase().includes(search)
   ) : pets;
+  if (currentFamilyTagFilter) {
+    filtered = filtered.filter(p => (p.familyTag||'') === currentFamilyTagFilter);
+  }
+
   const sorted = [...filtered].sort((a,b)=>
     sortMode==='name' ? (a.name||'').localeCompare(b.name||'','ja') : (b.updatedAt||0)-(a.updatedAt||0)
   );
+
+  // 家族タグチップバーを描画
+  renderFamilyTagBar(pets);
+
   const container = document.getElementById('pet-list');
   if(!sorted.length){
-    container.innerHTML=`<div class="empty-state"><div class="empty-emoji">${currentType==='dog'?'🐕':'🐈'}</div><p>${search?'検索結果がありません':'まだ登録がありません<br>＋ボタンから追加しよう'}</p></div>`;
+    container.innerHTML=`<div class="empty-state"><div class="empty-emoji">${currentType==='dog'?'🐕':'🐈'}</div><p>${search||currentFamilyTagFilter?'検索結果がありません':'まだ登録がありません<br>＋ボタンから追加しよう'}</p></div>`;
     return;
   }
   container.innerHTML = sorted.map((pet,i)=>{
@@ -158,15 +170,38 @@ function renderList() {
       ? `<div class="pet-card-photo"><img src="${pet.photo}" alt="${escHtml(pet.name)}"></div>`
       : `<div class="pet-card-photo">${currentType==='dog'?'🐕':'🐈'}</div>`;
     const genderIcon = pet.gender==='オス'?'♂':pet.gender==='メス'?'♀':'';
+    // 続柄スタンプ
+    const roleStamp = pet.familyRole ? `<div class="role-stamp">${escHtml(pet.familyRole)}</div>` : '';
     return `<div class="pet-card" onclick="openDetail('${pet.id}')" style="animation-delay:${i*0.04}s">
-      ${photoHtml}
+      <div class="pet-card-photo-wrap">
+        ${photoHtml}
+        ${roleStamp}
+      </div>
       <div class="pet-card-info">
         <div class="pet-card-name">${escHtml(pet.name)} ${genderIcon}</div>
         <div class="pet-card-meta">${escHtml(pet.breed||'')} ${age}</div>
+        ${pet.familyTag ? `<div class="pet-card-family-tag">${escHtml(pet.familyTag)}</div>` : ''}
       </div>
       <div class="pet-card-arrow">›</div>
     </div>`;
   }).join('');
+}
+
+function renderFamilyTagBar(pets) {
+  const bar = document.getElementById('family-tag-bar');
+  if (!bar) return;
+  const tags = [...new Set(pets.map(p=>p.familyTag).filter(Boolean))];
+  if (tags.length === 0) { bar.innerHTML = ''; bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = `
+    <div class="family-tag-chip ${!currentFamilyTagFilter?'active':''}" onclick="setFamilyTagFilter(null)">すべて</div>
+    ${tags.map(t=>`<div class="family-tag-chip ${currentFamilyTagFilter===t?'active':''}" onclick="setFamilyTagFilter('${escHtml(t)}')">${escHtml(t)}</div>`).join('')}
+  `;
+}
+
+function setFamilyTagFilter(tag) {
+  currentFamilyTagFilter = tag;
+  renderList();
 }
 function filterList() { renderList(); }
 function sortList(mode) {
@@ -174,6 +209,14 @@ function sortList(mode) {
   document.getElementById('sort-name-btn').classList.toggle('active',mode==='name');
   document.getElementById('sort-date-btn').classList.toggle('active',mode==='date');
   renderList();
+}
+
+// 全ペットから家族タグ一覧を取得（サジェスト用）
+function getAllFamilyTags() {
+  const data = loadData();
+  const tags = new Set();
+  ['dog','cat'].forEach(t => (data[t]||[]).forEach(p => { if(p.familyTag) tags.add(p.familyTag); }));
+  return [...tags];
 }
 
 // ========== 詳細 ==========
@@ -310,6 +353,21 @@ function renderDetailContent(pet, isEditing) {
         </div>
       </div>
       ${breedSection}
+      <div class="detail-field">
+        <label class="field-label">🏠 家族タグ（グループ名）</label>
+        <div class="view-only field-value">${escHtml(pet.familyTag||'未設定')}</div>
+        <div class="edit-only">
+          <input type="text" class="field-input" id="edit-family-tag" value="${escHtml(pet.familyTag||'')}" placeholder="例: 山田家、実家、〇〇さん宅" list="family-tag-suggestions">
+          <datalist id="family-tag-suggestions">${getAllFamilyTags().map(t=>`<option value="${escHtml(t)}">`).join('')}</datalist>
+        </div>
+      </div>
+      <div class="detail-field">
+        <label class="field-label">🏷 続柄・立ち位置</label>
+        <div class="view-only field-value">${escHtml(pet.familyRole||'未設定')}</div>
+        <div class="edit-only">
+          <input type="text" class="field-input" id="edit-family-role" value="${escHtml(pet.familyRole||'')}" placeholder="例: 長男、次女、保護っ子、お空組">
+        </div>
+        </div>
     </div>
     <div class="detail-card">
       <div class="detail-card-title">問題・気になること</div>
@@ -360,24 +418,72 @@ function onDetailPhotoChange(event) {
   });
 }
 
-// ========== 画像圧縮（HEIC対応含む制限解除） ==========
+// ========== 画像圧縮（HEIC対応・既存base64データ対応） ==========
 function compressAndLoad(file, callback) {
   const reader=new FileReader();
   reader.onload=e=>{
-    const img=new Image();
-    img.onload=()=>{
-      const MAX=1200;
-      let w=img.width, h=img.height;
-      if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
-      const canvas=document.createElement('canvas');
-      canvas.width=w; canvas.height=h;
-      canvas.getContext('2d').drawImage(img,0,0,w,h);
-      callback(canvas.toDataURL('image/jpeg',0.85));
-    };
-    img.onerror=()=>callback(e.target.result); // 圧縮失敗時は元データ
-    img.src=e.target.result;
+    const src = e.target.result;
+    _compressFromDataUrl(src, callback);
   };
   reader.readAsDataURL(file);
+}
+
+// インポートデータ内の既存base64 / 新規ファイルどちらも圧縮できる共通処理
+function _compressFromDataUrl(src, callback) {
+  const img=new Image();
+  img.onload=()=>{
+    const MAX=1400;
+    let w=img.width, h=img.height;
+    if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
+    const canvas=document.createElement('canvas');
+    canvas.width=w; canvas.height=h;
+    const ctx=canvas.getContext('2d');
+    ctx.drawImage(img,0,0,w,h);
+    // JPEG変換できた場合はJPEGで、できなければ元データをそのまま返す
+    try {
+      const out = canvas.toDataURL('image/jpeg', 0.85);
+      callback(out && out.length > 100 ? out : src);
+    } catch(_) {
+      callback(src);
+    }
+  };
+  img.onerror=()=>callback(src); // 圧縮失敗時は元データをそのまま使用
+  img.src=src;
+}
+
+// インポート時に壊れた画像データを修復してから保存する（Promise対応・完全非同期）
+function sanitizeImportedPhotos(data) {
+  const tasks = [];
+  ['dog','cat'].forEach(type => {
+    (data[type]||[]).forEach(pet => {
+      // ペットのメイン写真を修復（圧縮し直す）
+      if (pet.photo && pet.photo.startsWith('data:')) {
+        tasks.push(new Promise(resolve => {
+          _compressFromDataUrl(pet.photo, fixed => { pet.photo = fixed; resolve(); });
+        }));
+      }
+      // 通院記録の写真も同様に修復
+      (pet.medicalRecords||[]).forEach(rec => {
+        if (rec.photo && rec.photo.startsWith('data:')) {
+          tasks.push(new Promise(resolve => {
+            _compressFromDataUrl(rec.photo, fixed => { rec.photo = fixed; resolve(); });
+          }));
+        }
+      });
+      // 証明書写真の修復
+      if (pet.certificates) {
+        Object.keys(pet.certificates).forEach(k => {
+          const cert = pet.certificates[k];
+          if (cert && cert.photo && cert.photo.startsWith('data:')) {
+            tasks.push(new Promise(resolve => {
+              _compressFromDataUrl(cert.photo, fixed => { cert.photo = fixed; resolve(); });
+            }));
+          }
+        });
+      }
+    });
+  });
+  return Promise.all(tasks).then(() => data);
 }
 
 function savePet() {
@@ -392,6 +498,8 @@ function savePet() {
   pet.age=(document.getElementById('edit-age')?.value||'').trim();
   pet.weight=(document.getElementById('edit-weight')?.value||'').trim();
   pet.memo=document.getElementById('edit-memo')?.value||'';
+  pet.familyTag=(document.getElementById('edit-family-tag')?.value||'').trim();
+  pet.familyRole=(document.getElementById('edit-family-role')?.value||'').trim();
   pet.updatedAt=Date.now();
   if(currentType==='dog' || currentType==='cat'){
     pet.breed=document.getElementById('edit-breed')?.value||'';
@@ -846,10 +954,20 @@ function importData(event){
       const data=JSON.parse(e.target.result);
       if(!data.dog||!data.cat)throw new Error();
       if(!confirm('現在のデータに上書きします。よろしいですか？'))return;
-      saveData(data);
-      closeModal(null,'modal-transfer');
-      showToast('インポートしました ✓');
-      if(currentType)renderList();
+      // 古いデータで壊れていた画像を再圧縮して修復してから保存（完全非同期Promise）
+      sanitizeImportedPhotos(data).then(fixedData => {
+        saveData(fixedData);
+        // 共通病院データも移行
+        if(fixedData.hospitals){
+          const cur = loadHospitals();
+          const ids = new Set(cur.map(h=>h.id));
+          fixedData.hospitals.filter(h=>!ids.has(h.id)).forEach(h=>cur.push(h));
+          saveHospitals(cur);
+        }
+        closeModal(null,'modal-transfer');
+        showToast('インポートしました ✓');
+        if(currentType)renderList();
+      });
     }catch(err){ alert('ファイルが正しくありません。'); }
   };
   reader.readAsText(file);
@@ -952,6 +1070,8 @@ function openHospitalRecords(petId) {
   renderCertificates();
   renderMedicineCareSection();
   renderMedicineListMaster();
+  renderWalkTimer();
+  renderPendingNotes(petId);
   // カレンダーは画面遷移アニメーション完了後に描画
   setTimeout(() => renderCareCalendar(), 400);
 }
@@ -1339,6 +1459,24 @@ function addWeightRecord() {
   showToast('体重を記録しました ✓');
 }
 
+// 体重履歴と通院記録の両方を参照して最新体重を再計算する（巻き戻し）
+function rollbackWeight(pet) {
+  // weightHistory + medicalRecordsの両方から体重を集めて最新を特定
+  const allWeights = [];
+  (pet.weightHistory||[]).forEach(w => {
+    if(w.weight) allWeights.push({date: w.date, weight: Number(w.weight)});
+  });
+  (pet.medicalRecords||[]).forEach(r => {
+    if(r.weight) allWeights.push({date: r.date, weight: Number(r.weight)});
+  });
+  allWeights.sort((a,b) => b.date.localeCompare(a.date));
+  if(allWeights.length > 0) {
+    pet.weight = String(allWeights[0].weight);
+  } else {
+    pet.weight = '';
+  }
+}
+
 function deleteWeightRecord(id) {
   if (!confirm('この体重の記録を削除しますか？')) return;
   
@@ -1350,20 +1488,15 @@ function deleteWeightRecord(id) {
   const pet = ensurePetHospitalFields(pets[idx]);
   pet.weightHistory = pet.weightHistory.filter(w => w.id !== id);
   
-  // 体重情報の連動更新
-  const sortedHistory = [...pet.weightHistory].sort((a,b) => b.date.localeCompare(a.date));
-  if (sortedHistory.length > 0) {
-    pet.weight = String(sortedHistory[0].weight);
-  } else {
-    pet.weight = '';
-  }
+  // 巻き戻しロジック：削除後に残ったデータから最新体重を自動設定
+  rollbackWeight(pet);
   
   pets[idx] = pet;
   data[currentType] = pets;
   saveData(data);
   
   renderWeightSection();
-  showToast('削除しました');
+  showToast('削除しました（体重を自動更新）');
 }
 
 // ==========================================
@@ -1913,6 +2046,159 @@ function toggleYearGroup(year) {
   if (el) el.classList.toggle('open');
 }
 
+function toggleYearGroup(year) {
+  const el = document.getElementById(`year-group-${year}`);
+  if (el) el.classList.toggle('open');
+}
+
+// ========== まとめて通院記録 ==========
+let bulkSyncValues = {}; // 同期中の共通値
+
+function openBulkMedicalModal() {
+  const data = loadData();
+  const allPets = (data[currentType] || []);
+  if (allPets.length === 0) { alert('ペットが登録されていません'); return; }
+
+  // 共通フィールドの初期化
+  bulkSyncValues = {};
+  document.getElementById('bulk-m-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('bulk-m-hospital-select').innerHTML =
+    '<option value="">-- 選択してください --</option>' +
+    getHospitals().map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
+  document.getElementById('bulk-m-hospital-select').value = '';
+  document.getElementById('bulk-m-cost').value = '';
+
+  // フィルターされているペットたちを使う（currentFamilyTagFilter適用済みリスト）
+  const rawSearch = document.getElementById('search-input')?.value.trim() || '';
+  const search = toHiragana(rawSearch).toLowerCase();
+  let filtered = search ? allPets.filter(p =>
+    toHiragana(p.name||'').toLowerCase().includes(search) ||
+    toHiragana(p.breed||'').toLowerCase().includes(search)
+  ) : allPets;
+  if (currentFamilyTagFilter) {
+    filtered = filtered.filter(p => (p.familyTag||'') === currentFamilyTagFilter);
+  }
+
+  const list = document.getElementById('bulk-pets-list');
+  list.innerHTML = filtered.map(pet => `
+    <div class="bulk-pet-row" id="bulk-row-${pet.id}">
+      <div class="bulk-pet-row-header" onclick="toggleBulkPetRow('${pet.id}')">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="bulk-pet-photo">${pet.photo ? `<img src="${pet.photo}" alt="">` : (currentType==='dog'?'🐕':'🐈')}</div>
+          <span style="font-weight:700;font-size:14px;color:var(--text-dark);">${escHtml(pet.name)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:var(--accent);">
+            <input type="checkbox" id="bulk-include-${pet.id}" checked onchange="renderBulkPetRow('${pet.id}')"> 対象
+          </label>
+          <span style="font-size:16px;color:var(--text-light);">›</span>
+        </div>
+      </div>
+      <div class="bulk-pet-row-body" id="bulk-body-${pet.id}" style="display:none;">
+        <div style="padding:10px 0 0 0;">
+          <label class="field-label" style="font-size:11px;">体重 (kg)</label>
+          <input type="number" id="bulk-weight-${pet.id}" class="field-input" placeholder="例: 4.5" step="0.01" min="0" style="margin-bottom:6px;">
+          <label class="field-label" style="font-size:11px;">日常ケア</label>
+          <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <label style="display:flex;align-items:center;gap:3px;font-size:12px;font-weight:700;"><input type="checkbox" id="bulk-nail-${pet.id}"> 💅爪切り</label>
+            <label style="display:flex;align-items:center;gap:3px;font-size:12px;font-weight:700;"><input type="checkbox" id="bulk-tooth-${pet.id}"> 🪥歯磨き</label>
+            <label style="display:flex;align-items:center;gap:3px;font-size:12px;font-weight:700;"><input type="checkbox" id="bulk-flea-${pet.id}"> 💊ノミダニ</label>
+          </div>
+          <label class="field-label" style="font-size:11px;">メモ（この子だけ）</label>
+          <textarea id="bulk-notes-${pet.id}" class="field-input" rows="2" placeholder="個別の症状・診療内容など…" style="margin-bottom:0;"></textarea>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('modal-bulk-medical').classList.add('open');
+}
+
+function toggleBulkPetRow(petId) {
+  const body = document.getElementById('bulk-body-' + petId);
+  if (!body) return;
+  body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveBulkMedicalRecord() {
+  const date = document.getElementById('bulk-m-date').value;
+  const hospitalId = document.getElementById('bulk-m-hospital-select').value;
+  if (!date || !hospitalId) { alert('日付と病院を選択してください'); return; }
+
+  const sharedCost = document.getElementById('bulk-m-cost').value;
+  const data = loadData();
+  const allPets = data[currentType] || [];
+  let savedCount = 0;
+
+  allPets.forEach(pet => {
+    const checkbox = document.getElementById('bulk-include-' + pet.id);
+    if (!checkbox || !checkbox.checked) return;
+
+    const petIdx = allPets.findIndex(p => p.id === pet.id);
+    if (petIdx === -1) return;
+    const p = ensurePetHospitalFields(allPets[petIdx]);
+
+    const recWeight = (document.getElementById('bulk-weight-' + pet.id)?.value || '').trim();
+    const nailChecked = document.getElementById('bulk-nail-' + pet.id)?.checked || false;
+    const toothChecked = document.getElementById('bulk-tooth-' + pet.id)?.checked || false;
+    const fleaChecked = document.getElementById('bulk-flea-' + pet.id)?.checked || false;
+    const notes = (document.getElementById('bulk-notes-' + pet.id)?.value || '').trim();
+
+    const recData = {
+      id: 'med_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
+      date,
+      type: 'medical',
+      hospitalId,
+      doctor: '',
+      cost: sharedCost ? Number(sharedCost) : '',
+      notes,
+      photo: null,
+      weight: recWeight ? Number(recWeight) : '',
+      cares: { nail: nailChecked, tooth: toothChecked, flea: fleaChecked },
+      vaccineName: '',
+      antibodyVals: null
+    };
+
+    p.medicalRecords.push(recData);
+
+    if (recWeight) {
+      const wVal = Number(recWeight);
+      const existingWIdx = p.weightHistory.findIndex(w => w.date === date);
+      if (existingWIdx !== -1) {
+        p.weightHistory[existingWIdx].weight = wVal;
+      } else {
+        p.weightHistory.push({ id: 'w_' + Date.now() + '_' + Math.random().toString(36).substr(2,5), date, weight: wVal });
+      }
+      const sortedHistory = [...p.weightHistory].sort((a,b) => b.date.localeCompare(a.date));
+      if (sortedHistory.length > 0) p.weight = String(sortedHistory[0].weight);
+    }
+
+    if (nailChecked || toothChecked || fleaChecked) {
+      if (!p.quickCares[date]) p.quickCares[date] = {};
+      if (nailChecked) p.quickCares[date].nail = true;
+      if (toothChecked) p.quickCares[date].tooth = true;
+      if (fleaChecked) p.quickCares[date].flea = true;
+    }
+
+    allPets[petIdx] = p;
+    savedCount++;
+  });
+
+  data[currentType] = allPets;
+  saveData(data);
+  closeModal(null, 'modal-bulk-medical');
+
+  // 現在開いているペットの画面を更新
+  if (currentPetId) {
+    renderMedicalTimeline();
+    renderWeightSection();
+    renderQuickCares();
+    renderCareCalendar();
+  }
+
+  showToast(`${savedCount}頭分の通院記録を保存しました ✓`);
+}
+
 function openMedicalRecordModal(recordId = null) {
   const data = loadData();
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
@@ -2057,6 +2343,8 @@ function openMedicalRecordModal(recordId = null) {
     renderMedicalDoctorSelect(document.getElementById('m-hospital-select').value, '');
   }
   document.getElementById('modal-medical-record').classList.add('open');
+  // 未消化の気になるメモを表示
+  renderUndigestedNotesForModal(currentPetId);
 }
 
 function selectMedicalType(type) {
@@ -2210,7 +2498,7 @@ function saveMedicalRecord() {
     hospitalId,
     doctor: getMedicalDoctorValue(),
     cost: document.getElementById('m-cost').value ? Number(document.getElementById('m-cost').value) : '',
-    notes: document.getElementById('m-notes').value.trim(),
+    notes: digestSelectedPendingNotes(currentPetId, document.getElementById('m-notes').value.trim()),
     photo: tempMedicalPhoto || null,
     weight: recWeight ? Number(recWeight) : '',
     cares: { nail: nailChecked, tooth: toothChecked, flea: fleaChecked },
@@ -2309,12 +2597,16 @@ function deleteMedicalRecord(recordId) {
   const pet = ensurePetHospitalFields(pets[idx]);
   pet.medicalRecords = pet.medicalRecords.filter(r => r.id !== recordId);
   
+  // 巻き戻しロジック：通院記録削除後も体重を正しい最新値に更新
+  rollbackWeight(pet);
+  
   pets[idx] = pet;
   data[currentType] = pets;
   saveData(data);
   
   renderMedicalTimeline();
-  renderHospitalMaster(); // 逆引き一覧の再更新用
+  renderHospitalMaster();
+  renderWeightSection();
   showToast('記録を削除しました');
 }
 
@@ -3309,6 +3601,303 @@ function showToast(msg){
   t.style.cssText=`position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:rgba(44,36,24,0.85);color:white;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;z-index:9999;white-space:nowrap;transition:opacity 0.3s;`;
   document.body.appendChild(t);
   setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},2200);
+}
+
+// ========== 散歩タイマー（省電力・引き算方式） ==========
+let walkTimerInterval = null;
+
+function loadWalkTimerState() {
+  try { return JSON.parse(localStorage.getItem('wannyan_walk_timer') || 'null'); }
+  catch(e) { return null; }
+}
+function saveWalkTimerState(state) {
+  if (state) localStorage.setItem('wannyan_walk_timer', JSON.stringify(state));
+  else localStorage.removeItem('wannyan_walk_timer');
+}
+
+function startWalkTimer(petId) {
+  const state = {
+    petId,
+    startTs: Date.now()
+  };
+  saveWalkTimerState(state);
+  tickWalkTimer();
+}
+
+function stopWalkTimer() {
+  const state = loadWalkTimerState();
+  if (!state) return;
+  clearInterval(walkTimerInterval);
+  walkTimerInterval = null;
+  const elapsed = Math.floor((Date.now() - state.startTs) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+
+  // 散歩実績をquickCaresに記録
+  if (currentPetId) {
+    const data = loadData();
+    const pets = data[currentType] || [];
+    const idx = pets.findIndex(p => p.id === currentPetId);
+    if (idx !== -1) {
+      const pet = ensurePetHospitalFields(pets[idx]);
+      const dateStr = new Date().toISOString().split('T')[0];
+      if (!pet.quickCares[dateStr]) pet.quickCares[dateStr] = {};
+      pet.quickCares[dateStr].walkMinutes = (pet.quickCares[dateStr].walkMinutes || 0) + mins;
+      pets[idx] = pet;
+      data[currentType] = pets;
+      saveData(data);
+    }
+  }
+
+  saveWalkTimerState(null);
+  renderWalkTimer();
+  showToast(`散歩終了 🐾 ${mins}分${secs}秒`);
+}
+
+function tickWalkTimer() {
+  clearInterval(walkTimerInterval);
+  const update = () => {
+    const state = loadWalkTimerState();
+    if (!state) { clearInterval(walkTimerInterval); renderWalkTimer(); return; }
+    const elapsed = Math.floor((Date.now() - state.startTs) / 1000);
+    const em = Math.floor(elapsed / 60);
+    const es = elapsed % 60;
+    const disp = document.getElementById('walk-timer-display');
+    if (disp) {
+      disp.innerHTML = `
+        <div class="walk-timer-elapsed">${String(em).padStart(2,'0')}:${String(es).padStart(2,'0')}</div>
+      `;
+    }
+  };
+  update();
+  walkTimerInterval = setInterval(update, 1000);
+
+  // Page Visibility API でバックグラウンド時にタイマー停止、復帰時に引き算で再描画
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+}
+
+function onVisibilityChange() {
+  if (document.hidden) {
+    clearInterval(walkTimerInterval);
+  } else {
+    const state = loadWalkTimerState();
+    if (state) tickWalkTimer();
+  }
+}
+
+function renderWalkTimer() {
+  const container = document.getElementById('walk-timer-section');
+  if (!container) return;
+  const state = loadWalkTimerState();
+  const petId = currentPetId;
+  const data = loadData();
+  const pet = petId ? (data[currentType]||[]).find(p=>p.id===petId) : null;
+  const walkEnv = pet ? (pet.walkEnv || {}) : {};
+
+  // walkEnv.walkTimes は [{label, minutes}] の配列（カスタム複数枠）
+  const walkTimes = walkEnv.walkTimes || (walkEnv.normalMinutes ? [{label:'通常', minutes: walkEnv.normalMinutes}] : []);
+  const coolTime = walkEnv.coolMinutes ? [{label:'保冷剤あり', minutes: walkEnv.coolMinutes}] : [];
+  const allTimes = walkTimes.concat(coolTime.filter(t => !walkTimes.find(w => w.label === t.label)));
+
+  const timesHtml = allTimes.length > 0
+    ? allTimes.map(t => `<div class="walk-env-item"><span class="walk-env-label">⏱ ${escHtml(t.label)}</span><span>${escHtml(String(t.minutes))}分</span></div>`).join('')
+    : '';
+
+  const envHtml = `
+    <div class="walk-env-grid">
+      <div class="walk-env-item"><span class="walk-env-label">🌡 出かけない気温</span><span>${walkEnv.maxTemp||'-'}℃以上 / ${walkEnv.minTemp||'-'}℃以下</span></div>
+      <div class="walk-env-item"><span class="walk-env-label">👗 服を着る気温</span><span>${walkEnv.clothTemp||'-'}℃以下</span></div>
+      <div class="walk-env-item"><span class="walk-env-label">🧊 保冷剤使う気温</span><span>${walkEnv.coolTemp||'-'}℃以上</span></div>
+      ${timesHtml}
+    </div>
+  `;
+
+  if (state && state.petId === petId) {
+    container.innerHTML = `
+      ${envHtml}
+      <div id="walk-timer-display" class="walk-timer-display"></div>
+      <button class="walk-timer-stop-btn" onclick="stopWalkTimer()">🏁 散歩終了</button>
+    `;
+    tickWalkTimer();
+  } else {
+    container.innerHTML = `
+      ${envHtml}
+      <div style="margin-top:10px;">
+        <button class="walk-timer-start-btn" onclick="startWalkTimer('${petId}')">🐾 散歩スタート</button>
+      </div>
+    `;
+  }
+}
+
+function saveWalkEnv() {
+  const data = loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+
+  // 散歩時間の複数枠を収集
+  const walkTimes = [];
+  document.querySelectorAll('#we-walk-times-list .we-walk-time-row').forEach(row => {
+    const label = row.querySelector('.we-walk-time-label')?.value.trim() || '';
+    const minutes = row.querySelector('.we-walk-time-min')?.value.trim() || '';
+    if (label && minutes) walkTimes.push({ label, minutes });
+  });
+
+  pets[idx].walkEnv = {
+    maxTemp: document.getElementById('we-max-temp')?.value||'',
+    minTemp: document.getElementById('we-min-temp')?.value||'',
+    clothTemp: document.getElementById('we-cloth-temp')?.value||'',
+    coolTemp: document.getElementById('we-cool-temp')?.value||'',
+    walkTimes
+  };
+  data[currentType] = pets;
+  saveData(data);
+  closeModal(null,'modal-walk-env');
+  renderWalkTimer();
+  showToast('散歩設定を保存しました ✓');
+}
+
+function addWalkTimeRow(label = '', minutes = '') {
+  const list = document.getElementById('we-walk-times-list');
+  if (!list) return;
+  const rowId = 'we_wt_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+  const row = document.createElement('div');
+  row.className = 'we-walk-time-row';
+  row.id = rowId;
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+  row.innerHTML = `
+    <input type="text" class="we-walk-time-label field-input" placeholder="ラベル（例: 通常、雨の日）" value="${escHtml(label)}" style="flex:2;margin-bottom:0;">
+    <input type="number" class="we-walk-time-min field-input" placeholder="分" value="${escHtml(String(minutes))}" min="1" style="flex:1;margin-bottom:0;">
+    <span style="font-size:12px;color:var(--text-light);white-space:nowrap">分</span>
+    <button type="button" onclick="confirmRemoveWalkTimeRow('${rowId}')" style="border:none;background:rgba(200,80,80,0.12);color:#c04040;border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer;white-space:nowrap;">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+function confirmRemoveWalkTimeRow(rowId) {
+  if (!confirm('この散歩時間設定を削除しますか？')) return;
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
+}
+
+function openWalkEnvModal() {
+  const data = loadData();
+  const pet = (data[currentType]||[]).find(p=>p.id===currentPetId);
+  const e = pet?.walkEnv || {};
+  document.getElementById('we-max-temp').value = e.maxTemp||'';
+  document.getElementById('we-min-temp').value = e.minTemp||'';
+  document.getElementById('we-cloth-temp').value = e.clothTemp||'';
+  document.getElementById('we-cool-temp').value = e.coolTemp||'';
+
+  // 散歩時間の複数枠を展開（旧データの互換）
+  const list = document.getElementById('we-walk-times-list');
+  if (list) {
+    list.innerHTML = '';
+    const walkTimes = e.walkTimes || (e.normalMinutes ? [{label:'通常', minutes: e.normalMinutes}] : []);
+    const legacy = e.coolMinutes && !walkTimes.find(t => t.label === '保冷剤あり') ? [{label:'保冷剤あり', minutes: e.coolMinutes}] : [];
+    [...walkTimes, ...legacy].forEach(t => addWalkTimeRow(t.label, t.minutes));
+  }
+
+  document.getElementById('modal-walk-env').classList.add('open');
+}
+
+// ========== 気になるメモ（次回通院用ストック） ==========
+function loadPendingNotes() {
+  try { return JSON.parse(localStorage.getItem('wannyan_pending_notes_v1') || '{}'); }
+  catch(e) { return {}; }
+}
+function savePendingNotes(notes) { localStorage.setItem('wannyan_pending_notes_v1', JSON.stringify(notes)); }
+
+function getPetPendingNotes(petId) {
+  const all = loadPendingNotes();
+  return all[petId] || [];
+}
+
+function addPendingNote(petId) {
+  const input = document.getElementById('pending-note-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  const all = loadPendingNotes();
+  if (!all[petId]) all[petId] = [];
+  all[petId].push({ id: 'note_' + Date.now(), text, createdAt: new Date().toISOString() });
+  savePendingNotes(all);
+  input.value = '';
+  renderPendingNotes(petId);
+  showToast('メモをストックしました ✓');
+}
+
+function deletePendingNote(petId, noteId) {
+  if (!confirm('このメモを削除しますか？')) return;
+  const all = loadPendingNotes();
+  all[petId] = (all[petId] || []).filter(n => n.id !== noteId);
+  savePendingNotes(all);
+  renderPendingNotes(petId);
+}
+
+function renderPendingNotes(petId) {
+  const container = document.getElementById('pending-notes-list');
+  if (!container) return;
+  const notes = getPetPendingNotes(petId);
+  if (notes.length === 0) {
+    container.innerHTML = '<div class="memo-view memo-empty" style="font-size:12px">次回通院用のメモはありません</div>';
+    return;
+  }
+  container.innerHTML = notes.map(n => `
+    <div class="pending-note-item">
+      <span class="pending-note-text">${escHtml(n.text)}</span>
+      <button class="pending-note-del" onclick="deletePendingNote('${petId}','${n.id}')" title="削除">🗑</button>
+    </div>
+  `).join('');
+}
+
+// 通院記録モーダルで未消化メモを表示（タップで選択・外すとストックに戻る）
+function renderUndigestedNotesForModal(petId) {
+  const area = document.getElementById('m-pending-notes-area');
+  if (!area) return;
+  const notes = getPetPendingNotes(petId);
+  if (notes.length === 0) { area.style.display = 'none'; return; }
+  area.style.display = 'block';
+  const list = document.getElementById('m-pending-notes-list');
+  if (!list) return;
+  list.innerHTML = notes.map(n => `
+    <div class="pending-note-chip selected" id="pnchip-${n.id}">
+      <span onclick="togglePendingNoteSelect('${n.id}', document.getElementById('pnchip-${n.id}'))" style="flex:1;cursor:pointer;">${escHtml(n.text)}</span>
+      <button onclick="returnPendingNoteToStock('${petId}','${n.id}')" style="border:none;background:none;color:#c04040;font-size:11px;cursor:pointer;padding:0 2px;font-weight:700;" title="外してストックに戻す">外す</button>
+    </div>
+  `).join('');
+}
+
+// 通院記録モーダルから「外す」を押したときメモをストックに戻す（削除ではない）
+function returnPendingNoteToStock(petId, noteId) {
+  // ストックに残したまま、チップを非表示にする（保存時に選択されなければ消化されない）
+  const chip = document.getElementById('pnchip-' + noteId);
+  if (chip) {
+    chip.classList.remove('selected');
+    chip.style.display = 'none';
+  }
+  showToast('メモを外しました（ストックに残ります）');
+}
+
+function togglePendingNoteSelect(noteId, el) {
+  el.classList.toggle('selected');
+}
+
+// 通院記録保存時に選択済みメモをnotesに結合して消化する
+function digestSelectedPendingNotes(petId, currentNotes) {
+  const chips = document.querySelectorAll('#m-pending-notes-list .pending-note-chip.selected');
+  if (chips.length === 0) return currentNotes;
+  const texts = [...chips].map(c => c.textContent.trim());
+  const combined = [currentNotes, ...texts.map(t=>`[気になるメモ] ${t}`)].filter(Boolean).join('\n');
+  // 消化済みメモをストックから削除
+  const all = loadPendingNotes();
+  chips.forEach(c => {
+    const noteId = c.id.replace('pnchip-','');
+    all[petId] = (all[petId]||[]).filter(n => n.id !== noteId);
+  });
+  savePendingNotes(all);
+  return combined;
 }
 
 // ========== SW ==========
