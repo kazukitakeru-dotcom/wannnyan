@@ -3904,3 +3904,43 @@ function digestSelectedPendingNotes(petId, currentNotes) {
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
+
+// データのインポート処理をマイグレーション対応版に上書き
+handleImportJson = async function(jsonString) {
+  try {
+    const importedData = JSON.parse(jsonString);
+    if (!importedData.dog || !importedData.cat) {
+      showToast('データ形式が正しくありません');
+      return;
+    }
+    
+    // 【マイグレーション処理】犬と猫のデータをループして、古い画像データがないかチェック
+    ['dog', 'cat'].forEach(type => {
+      if (importedData[type] && Array.isArray(importedData[type])) {
+        importedData[type] = importedData[type].map(pet => {
+          
+          // もし古い画像データ（例: 写真が古いオブジェクトURL形式や特定の古いキーだった場合）の条件
+          if (pet.photo && pet.photo.startsWith('blob:')) {
+            // 過去の一時URLは復元できないため、プレースホルダーに差し替えるか、
+            // ユーザーに再登録を促すためのフラグを立てるなどの処理を行う
+            pet.photo = null; 
+          }
+          
+          // 新しいバージョンで必須になった画像関連のプロパティがなければ補完する
+          if (pet.photo && !pet.photoDataWindow) {
+            pet.photoDataWindow = 'current_format'; // 例としての補完
+          }
+          
+          return pet;
+        });
+      }
+    });
+
+    // 既存の古いデータURL形式（Base64）の写真を非同期で圧縮・修復・保存する処理へ渡す
+    sanitizeImportedPhotos(importedData);
+    
+  } catch (e) {
+    console.error('インポート失敗:', e);
+    showToast('データの解析に失敗しました');
+  }
+};
