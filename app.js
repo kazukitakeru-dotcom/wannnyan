@@ -452,48 +452,14 @@ function _compressFromDataUrl(src, callback) {
   img.src=src;
 }
 
-// インポート専用：画像が現在のブラウザで実際に表示できるか検証し、
-// 表示できればJPEGに変換して返す。表示できない（旧非対応形式など）場合は null を返す。
-// これにより「当時対応していなかった壊れたデータ」がそのまま保存されるのを防ぐ。
+// インポート専用：画像をJPEGに変換して返す。
+// 変換できない場合は元データをそのまま返す（nullにはしない）。
+// ※旧バージョンでは表示できない画像をnullにしていたが、
+//   現在のブラウザで読み込める画像まで消えてしまう問題があったため廃止。
 function _sanitizePhotoForImport(src, callback) {
   if (!src || !src.startsWith('data:')) { callback(null); return; }
-
-  let settled = false;
-  // タイムアウト：5秒以内に読み込めなければ表示不可とみなしnullにする
-  const timer = setTimeout(() => {
-    if (!settled) { settled = true; callback(null); }
-  }, 5000);
-
-  const img = new Image();
-  img.onload = () => {
-    if (settled) return;
-    settled = true;
-    clearTimeout(timer);
-
-    // 実際に描画できるか確認（幅・高さが0ならデコード失敗）
-    if (!img.width || !img.height) { callback(null); return; }
-
-    const MAX = 1400;
-    let w = img.width, h = img.height;
-    if (w > MAX || h > MAX) { const r = Math.min(MAX/w, MAX/h); w = Math.round(w*r); h = Math.round(h*r); }
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    try {
-      ctx.drawImage(img, 0, 0, w, h);
-      const out = canvas.toDataURL('image/jpeg', 0.85);
-      // 変換結果が有効なJPEGデータかチェック
-      callback((out && out.startsWith('data:image/jpeg') && out.length > 200) ? out : null);
-    } catch(_) {
-      // SecurityErrorなど描画できない場合もnull
-      callback(null);
-    }
-  };
-  // 読み込み失敗（非対応形式・壊れたデータ）→ null にクリアして新規設定できる状態にする
-  img.onerror = () => {
-    if (!settled) { settled = true; clearTimeout(timer); callback(null); }
-  };
-  img.src = src;
+  // 変換できればJPEGに、できなければ元データをそのまま使用（_compressFromDataUrlと同じ挙動）
+  _compressFromDataUrl(src, callback);
 }
 
 // インポート時に全写真データを検証・変換する（Promise対応・完全非同期）
@@ -2232,34 +2198,81 @@ function toggleYearGroup(year) {
 }
 
 // ========== まとめて通院記録 ==========
-let bulkSyncValues = {}; // 同期中の共通値
-let bulkTargetIds = new Set(); // 現在表示中のペットIDセット
+let bulkTargetIds = new Set(); // 記録対象ペットIDセット
 
-function openBulkMedicalModal() {
+// ──── 共通フィールドの同期ヘルパー ────
+// 指定フィールドの値を全ペット行に同期する
+function syncBulkField(field) {
+  if (!bulkTargetIds.size) return;
   const data = loadData();
-
-  const currentPets = (data[currentType] || []);
-  if (currentPets.length === 0) { alert('ペットが登録されていません'); return; }
-
-  bulkSyncValues = {};
-  document.getElementById('bulk-m-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('bulk-m-hospital-select').innerHTML =
-    '<option value="">-- 選択してください --</option>' +
-    getHospitals().map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
-  document.getElementById('bulk-m-hospital-select').value = '';
-  document.getElementById('bulk-m-cost').value = '';
-
-  // 全ペット一覧（dog+cat）
   const allPets = [
     ...(data.dog || []).map(p => ({...p, petType:'dog'})),
     ...(data.cat || []).map(p => ({...p, petType:'cat'}))
   ];
+  const targets = allPets.filter(p => bulkTargetIds.has(`${p.petType}-${p.id}`));
 
-  // 初期表示: 家族タグがある子のみ（なければ全員）
+  if (field === 'date') {
+    const val = document.getElementById('bulk-m-date').value;
+    targets.forEach(pet => {
+      const el = document.getElementById(`bulk-ind-date-${pet.petType}-${pet.id}`);
+      if (el) el.value = val;
+    });
+    showToast('日付を全員に同期しました');
+  } else if (field === 'hospital') {
+    const val = document.getElementById('bulk-m-hospital-select').value;
+    targets.forEach(pet => {
+      const el = document.getElementById(`bulk-ind-hospital-${pet.petType}-${pet.id}`);
+      if (el) el.value = val;
+    });
+    showToast('病院を全員に同期しました');
+  } else if (field === 'cost') {
+    const val = document.getElementById('bulk-m-cost').value;
+    targets.forEach(pet => {
+      const el = document.getElementById(`bulk-ind-cost-${pet.petType}-${pet.id}`);
+      if (el) el.value = val;
+    });
+    showToast('治療費を全員に同期しました');
+  } else if (field === 'care') {
+    const nail  = document.getElementById('bulk-m-care-nail').checked;
+    const tooth = document.getElementById('bulk-m-care-tooth').checked;
+    const flea  = document.getElementById('bulk-m-care-flea').checked;
+    targets.forEach(pet => {
+      const n = document.getElementById(`bulk-ind-nail-${pet.petType}-${pet.id}`);
+      const t = document.getElementById(`bulk-ind-tooth-${pet.petType}-${pet.id}`);
+      const f = document.getElementById(`bulk-ind-flea-${pet.petType}-${pet.id}`);
+      if (n) n.checked = nail;
+      if (t) t.checked = tooth;
+      if (f) f.checked = flea;
+    });
+    showToast('日常ケアを全員に同期しました');
+  }
+}
+
+function openBulkMedicalModal() {
+  const data = loadData();
+  const allPets = [
+    ...(data.dog || []).map(p => ({...p, petType:'dog'})),
+    ...(data.cat || []).map(p => ({...p, petType:'cat'}))
+  ];
+  if (allPets.length === 0) { alert('ペットが登録されていません'); return; }
+
+  // 共通フィールド初期化
+  document.getElementById('bulk-m-date').value = new Date().toISOString().split('T')[0];
+  const hospOpts = '<option value="">-- 選択してください --</option>' +
+    getHospitals().map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
+  document.getElementById('bulk-m-hospital-select').innerHTML = hospOpts;
+  document.getElementById('bulk-m-hospital-select').value = '';
+  document.getElementById('bulk-m-cost').value = '';
+  const nc = document.getElementById('bulk-m-care-nail');
+  const tc = document.getElementById('bulk-m-care-tooth');
+  const fc = document.getElementById('bulk-m-care-flea');
+  if (nc) nc.checked = false;
+  if (tc) tc.checked = false;
+  if (fc) fc.checked = false;
+
+  // 初期対象: 家族タグがある子のみ（なければ全員）
   const hasFamilyTag = allPets.filter(p => p.familyTag);
   const initialTargets = hasFamilyTag.length > 0 ? hasFamilyTag : allPets;
-
-  // 現在のペットIDセットを初期化
   bulkTargetIds = new Set(initialTargets.map(p => `${p.petType}-${p.id}`));
 
   renderBulkPetsList(allPets);
@@ -2275,57 +2288,194 @@ function renderBulkPetsList(allPets) {
     ];
   }
 
-  const inTargets = allPets.filter(p => bulkTargetIds.has(`${p.petType}-${p.id}`));
-  const notInTargets = allPets.filter(p => !bulkTargetIds.has(`${p.petType}-${p.id}`));
+  const inTargets  = allPets.filter(p =>  bulkTargetIds.has(`${p.petType}-${p.id}`));
+  const notTargets = allPets.filter(p => !bulkTargetIds.has(`${p.petType}-${p.id}`));
 
-  const list = document.getElementById('bulk-pets-list');
+  // 病院のセレクトオプション（個別用）
+  const hospOpts = '<option value="">-- 選択してください --</option>' +
+    getHospitals().map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
 
-  let html = inTargets.map(pet => `
-    <div class="bulk-pet-row" id="bulk-row-${pet.petType}-${pet.id}">
-      <div class="bulk-pet-row-header" onclick="toggleBulkPetRow('${pet.petType}-${pet.id}')">
+  // ワクチン選択オプション（ペット種別ごと）
+  function vaccineOpts(petType) {
+    const base = [{ value:'', text:'-- 選択してください --' }];
+    const dogOpts = [
+      {value:'狂犬病予防注射',text:'狂犬病予防注射'},
+      {value:'5種混合ワクチン',text:'5種混合ワクチン'},
+      {value:'6種混合ワクチン',text:'6種混合ワクチン'},
+      {value:'7種混合ワクチン',text:'7種混合ワクチン'},
+      {value:'8種混合ワクチン',text:'8種混合ワクチン'},
+      {value:'9種混合ワクチン',text:'9種混合ワクチン'},
+      {value:'10種混合ワクチン',text:'10種混合ワクチン'},
+      {value:'抗体価検査済',text:'抗体価検査済'},
+      {value:'custom',text:'その他（自由記入）'},
+    ];
+    const catOpts = [
+      {value:'3種混合ワクチン',text:'3種混合ワクチン'},
+      {value:'4種混合ワクチン',text:'4種混合ワクチン'},
+      {value:'5種混合ワクチン',text:'5種混合ワクチン'},
+      {value:'抗体価検査済',text:'抗体価検査済'},
+      {value:'custom',text:'その他（自由記入）'},
+    ];
+    return [...base, ...(petType==='dog' ? dogOpts : catOpts)]
+      .map(o => `<option value="${o.value}">${o.text}</option>`).join('');
+  }
+
+  // 対象ペット行
+  const inHtml = inTargets.map(pet => {
+    const key = `${pet.petType}-${pet.id}`;
+    return `
+    <div class="bulk-pet-row" id="bulk-row-${key}">
+      <div class="bulk-pet-row-header" onclick="toggleBulkPetRow('${key}')">
         <div style="display:flex;align-items:center;gap:8px;">
-          <div class="bulk-pet-photo" style="background:none;font-size:24px;width:auto;height:auto;">${pet.petType==='dog'?'🐕':'🐈'}</div>
+          <span style="font-size:22px;">${pet.petType==='dog'?'🐕':'🐈'}</span>
           <div>
             <div style="font-weight:700;font-size:14px;color:var(--text-dark);">${escHtml(pet.name)}</div>
-            <div style="font-size:11px;color:var(--text-light);">${escHtml(pet.familyTag || '家族タグなし')}</div>
+            <div style="font-size:11px;color:var(--text-light);">${escHtml(pet.familyTag||'家族タグなし')}</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <button onclick="event.stopPropagation();removeBulkTarget('${pet.petType}-${pet.id}')" style="border:none;background:#f3d6d6;color:#b44;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">除外</button>
+          <button onclick="event.stopPropagation();removeBulkTarget('${key}')"
+            style="border:none;background:#f3d6d6;color:#b44;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">除外</button>
           <span style="font-size:16px;color:var(--text-light);">›</span>
         </div>
       </div>
-      <div class="bulk-pet-row-body" id="bulk-body-${pet.petType}-${pet.id}" style="display:none;">
-        <div style="padding:10px 0 0 0;">
-          <label class="field-label" style="font-size:11px;">体重 (kg)</label>
-          <input type="number" id="bulk-weight-${pet.petType}-${pet.id}" class="field-input" placeholder="例: 4.5" step="0.01" min="0" style="margin-bottom:6px;">
-          <label class="field-label" style="font-size:11px;">メモ（この子だけ）</label>
-          <textarea id="bulk-notes-${pet.petType}-${pet.id}" class="field-input" rows="2"></textarea>
+      <div class="bulk-pet-row-body" id="bulk-body-${key}" style="display:none;padding:10px 0 4px 0;">
+
+        <label class="field-label" style="font-size:11px;">日付 <span class="required">*</span></label>
+        <input type="date" id="bulk-ind-date-${key}" class="field-input"
+          value="${document.getElementById('bulk-m-date').value}" style="margin-bottom:8px;">
+
+        <label class="field-label" style="font-size:11px;">記録タイプ</label>
+        <div class="gender-select" style="margin-bottom:8px;">
+          <button class="gender-btn selected" id="bulk-type-medical-${key}"
+            onclick="selectBulkType('${key}','medical')">🏥 病院・医療</button>
+          <button class="gender-btn" id="bulk-type-vaccine-${key}"
+            onclick="selectBulkType('${key}','vaccine')">💉 ワクチン・予防</button>
         </div>
+        <input type="hidden" id="bulk-ind-type-${key}" value="medical">
+
+        <label class="field-label" style="font-size:11px;">病院 <span class="required">*</span></label>
+        <select id="bulk-ind-hospital-${key}" class="field-input" style="margin-bottom:8px;"
+          onchange="onBulkIndHospitalChange('${key}')">
+          ${hospOpts}
+        </select>
+
+        <label class="field-label" style="font-size:11px;">担当医</label>
+        <div id="bulk-ind-doctor-wrap-${key}" style="margin-bottom:8px;">
+          <input type="text" id="bulk-ind-doctor-${key}" class="field-input"
+            placeholder="例: 山田先生" style="margin-bottom:0;">
+        </div>
+
+        <label class="field-label" style="font-size:11px;">治療費（円）</label>
+        <input type="number" id="bulk-ind-cost-${key}" class="field-input"
+          placeholder="例: 5400" min="0" style="margin-bottom:8px;"
+          value="${document.getElementById('bulk-m-cost').value}">
+
+        <label class="field-label" style="font-size:11px;">体重 (kg)</label>
+        <input type="number" id="bulk-ind-weight-${key}" class="field-input"
+          placeholder="例: 4.5" step="0.01" min="0" style="margin-bottom:8px;">
+
+        <div id="bulk-ind-vaccine-area-${key}" style="display:none;background:var(--cream);padding:10px;border-radius:10px;margin-bottom:8px;border:1px solid rgba(44,36,24,0.08);">
+          <p class="issue-memo-label" style="margin-top:0;">💉 ワクチン・抗体価の詳細記録</p>
+          <label class="field-label" style="font-size:11px;">ワクチンの種類 / 検査名</label>
+          <select id="bulk-ind-vaccine-select-${key}" class="field-input"
+            onchange="onBulkVaccineSelectChange('${key}')" style="margin-bottom:6px;">
+            ${vaccineOpts(pet.petType)}
+          </select>
+          <div id="bulk-ind-vaccine-custom-wrap-${key}" style="display:none;margin-bottom:6px;">
+            <input type="text" id="bulk-ind-vaccine-custom-${key}" class="field-input"
+              placeholder="製品名や詳細情報を自由記入">
+          </div>
+          <div id="bulk-ind-antibody-area-${key}" style="display:none;margin-top:6px;">
+            <p class="field-age-note" style="margin-bottom:6px;font-weight:700;">🔬 主要3種の抗体価を入力</p>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:11px;font-weight:700;width:120px;color:var(--text-dark);">${pet.petType==='dog'?'CDV (ジステンパー):':'FCV (カリシ):'}
+                </span>
+                <input type="text" id="bulk-ind-ab1-${key}" class="field-input"
+                  placeholder="例: 1:80" style="margin-bottom:0;flex:1;">
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:11px;font-weight:700;width:120px;color:var(--text-dark);">${pet.petType==='dog'?'CAV (アデノ):':'FHV (ヘルペス):'}
+                </span>
+                <input type="text" id="bulk-ind-ab2-${key}" class="field-input"
+                  placeholder="例: 1:160" style="margin-bottom:0;flex:1;">
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:11px;font-weight:700;width:120px;color:var(--text-dark);">${pet.petType==='dog'?'CPV (パルボ):':'FPV (パルボ):'}
+                </span>
+                <input type="text" id="bulk-ind-ab3-${key}" class="field-input"
+                  placeholder="例: 1:320" style="margin-bottom:0;flex:1;">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <label class="field-label" style="font-size:11px;">日常ケア（この子）</label>
+        <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
+            <input type="checkbox" id="bulk-ind-nail-${key}"
+              ${document.getElementById('bulk-m-care-nail')?.checked?'checked':''}> 💅 爪切り
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
+            <input type="checkbox" id="bulk-ind-tooth-${key}"
+              ${document.getElementById('bulk-m-care-tooth')?.checked?'checked':''}> 🪥 歯磨き
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
+            <input type="checkbox" id="bulk-ind-flea-${key}"
+              ${document.getElementById('bulk-m-care-flea')?.checked?'checked':''}> 💊 ノミダニ
+          </label>
+        </div>
+
+        <label class="field-label" style="font-size:11px;">メモ（この子だけ）</label>
+        <textarea id="bulk-ind-notes-${key}" class="field-input" rows="2"
+          style="margin-bottom:0;"></textarea>
       </div>
     </div>
-  `).join('');
+    `;
+  }).join('');
 
-  // 追加可能な子のセクション
-  if (notInTargets.length > 0) {
-    html += `
-      <div style="margin-top:10px; border-top:1px dashed rgba(44,36,24,0.12); padding-top:10px;">
-        <p style="font-size:11px;font-weight:700;color:var(--text-light);margin-bottom:6px;">追加できる子</p>
-        ${notInTargets.map(pet => `
-          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(44,36,24,0.05);">
-            <span style="font-size:18px;">${pet.petType==='dog'?'🐕':'🐈'}</span>
-            <div style="flex:1;">
-              <div style="font-size:13px;font-weight:700;color:var(--text-dark);">${escHtml(pet.name)}</div>
-              <div style="font-size:11px;color:var(--text-light);">${escHtml(pet.familyTag || '家族タグなし')}</div>
+  // 追加ボタンエリア（追加できる子がいる場合のみ）
+  let addHtml = '';
+  if (notTargets.length > 0) {
+    addHtml = `
+      <div style="margin-top:12px;">
+        <button onclick="openBulkAddPanel()" id="bulk-add-toggle-btn"
+          style="width:100%;border:none;background:rgba(200,132,74,0.12);color:var(--accent);
+                 border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">
+          ＋ 追加する
+        </button>
+        <div id="bulk-add-panel" style="display:none;margin-top:8px;border:1px dashed rgba(200,132,74,0.3);
+             border-radius:10px;padding:10px;">
+          <p style="font-size:11px;font-weight:700;color:var(--text-light);margin:0 0 8px 0;">追加できる子</p>
+          ${notTargets.map(pet => `
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 0;
+                 border-bottom:1px solid rgba(44,36,24,0.05);">
+              <span style="font-size:18px;">${pet.petType==='dog'?'🐕':'🐈'}</span>
+              <div style="flex:1;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-dark);">${escHtml(pet.name)}</div>
+                <div style="font-size:11px;color:var(--text-light);">${escHtml(pet.familyTag||'家族タグなし')}</div>
+              </div>
+              <button onclick="addBulkTarget('${pet.petType}','${pet.id}')"
+                style="border:none;background:rgba(200,132,74,0.15);color:var(--accent);
+                       border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">追加</button>
             </div>
-            <button onclick="addBulkTarget('${pet.petType}','${pet.id}')" style="border:none;background:rgba(200,132,74,0.15);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">追加</button>
-          </div>
-        `).join('')}
+          `).join('')}
+        </div>
       </div>
     `;
   }
 
-  list.innerHTML = html;
+  document.getElementById('bulk-pets-list').innerHTML = inHtml + addHtml;
+}
+
+function openBulkAddPanel() {
+  const panel = document.getElementById('bulk-add-panel');
+  const btn   = document.getElementById('bulk-add-toggle-btn');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (btn) btn.textContent = isOpen ? '＋ 追加する' : '▲ 閉じる';
 }
 
 function addBulkTarget(petType, petId) {
@@ -2349,91 +2499,208 @@ function removeBulkTarget(id) {
   renderBulkPetsList(allPets);
 }
 
-function toggleBulkPetRow(petId) {
-  const body = document.getElementById('bulk-body-' + petId);
+function toggleBulkPetRow(key) {
+  const body = document.getElementById('bulk-body-' + key);
   if (!body) return;
   body.style.display = body.style.display === 'none' ? 'block' : 'none';
 }
 
-function saveBulkMedicalRecord() {
-  const date = document.getElementById('bulk-m-date').value;
-  const hospitalId = document.getElementById('bulk-m-hospital-select').value;
-  if (!date || !hospitalId) { alert('日付と病院を選択してください'); return; }
+// 個別の記録タイプ切り替え
+function selectBulkType(key, type) {
+  document.getElementById(`bulk-ind-type-${key}`).value = type;
+  document.getElementById(`bulk-type-medical-${key}`).classList.toggle('selected', type==='medical');
+  document.getElementById(`bulk-type-vaccine-${key}`).classList.toggle('selected', type==='vaccine');
+  const vacArea = document.getElementById(`bulk-ind-vaccine-area-${key}`);
+  if (vacArea) vacArea.style.display = type==='vaccine' ? 'block' : 'none';
+}
 
-  const sharedCost = document.getElementById('bulk-m-cost').value;
+// 個別の病院選択時に担当医UIを更新
+function onBulkIndHospitalChange(key) {
+  const hospId = document.getElementById(`bulk-ind-hospital-${key}`)?.value;
+  const wrap   = document.getElementById(`bulk-ind-doctor-wrap-${key}`);
+  if (!wrap) return;
+  const hosp = hospId ? getHospitals().find(h => h.id === hospId) : null;
+  const doctors = hosp ? (hosp.doctors || (hosp.doctor ? [{name:hosp.doctor}] : [])) : [];
+  if (doctors.length > 0) {
+    const opts = doctors.map(d => `<option value="${escHtml(d.name)}">${escHtml(d.name)}${d.memo?'（'+escHtml(d.memo)+'）':''}</option>`).join('');
+    wrap.innerHTML = `
+      <select id="bulk-ind-doctor-sel-${key}" class="field-input"
+        onchange="onBulkDoctorSelChange('${key}')" style="margin-bottom:4px;">
+        <option value="">-- 担当医を選択 --</option>
+        ${opts}
+        <option value="__free__">自由記入する</option>
+      </select>
+      <input type="text" id="bulk-ind-doctor-${key}" class="field-input"
+        placeholder="担当医名を記入" style="display:none;margin-top:4px;">
+    `;
+  } else {
+    wrap.innerHTML = `<input type="text" id="bulk-ind-doctor-${key}" class="field-input"
+      placeholder="例: 山田先生" style="margin-bottom:0;">`;
+  }
+}
+
+function onBulkDoctorSelChange(key) {
+  const sel = document.getElementById(`bulk-ind-doctor-sel-${key}`);
+  const inp = document.getElementById(`bulk-ind-doctor-${key}`);
+  if (!sel || !inp) return;
+  if (sel.value === '__free__') {
+    inp.style.display = 'block'; inp.value = ''; inp.focus();
+  } else {
+    inp.style.display = 'none'; inp.value = sel.value;
+  }
+}
+
+function onBulkVaccineSelectChange(key) {
+  const sel       = document.getElementById(`bulk-ind-vaccine-select-${key}`);
+  const customWrap = document.getElementById(`bulk-ind-vaccine-custom-wrap-${key}`);
+  const abArea    = document.getElementById(`bulk-ind-antibody-area-${key}`);
+  if (!sel) return;
+  if (sel.value === 'custom') {
+    if (customWrap) customWrap.style.display = 'block';
+    if (abArea) abArea.style.display = 'none';
+  } else if (sel.value === '抗体価検査済') {
+    if (customWrap) customWrap.style.display = 'none';
+    if (abArea) abArea.style.display = 'block';
+  } else {
+    if (customWrap) customWrap.style.display = 'none';
+    if (abArea) abArea.style.display = 'none';
+  }
+}
+
+function getBulkIndDoctorValue(key) {
+  const sel = document.getElementById(`bulk-ind-doctor-sel-${key}`);
+  const inp = document.getElementById(`bulk-ind-doctor-${key}`);
+  if (sel) {
+    if (sel.value === '__free__' || sel.value === '') return inp ? inp.value.trim() : '';
+    return sel.value;
+  }
+  return inp ? inp.value.trim() : '';
+}
+
+function saveBulkMedicalRecord() {
   const data = loadData();
+  const allPets = [
+    ...(data.dog || []).map(p => ({...p, petType:'dog'})),
+    ...(data.cat || []).map(p => ({...p, petType:'cat'}))
+  ];
+  const targets = allPets.filter(p => bulkTargetIds.has(`${p.petType}-${p.id}`));
+  if (targets.length === 0) { alert('記録対象のペットがいません'); return; }
+
+  // 各ペットの必須項目（日付・病院）を検証
+  for (const pet of targets) {
+    const key  = `${pet.petType}-${pet.id}`;
+    const date = document.getElementById(`bulk-ind-date-${key}`)?.value;
+    const hosp = document.getElementById(`bulk-ind-hospital-${key}`)?.value;
+    if (!date || !hosp) {
+      alert(`「${pet.name}」の日付または病院が未入力です。\n各ペット行を開いて入力してください。`);
+      return;
+    }
+  }
+
   let savedCount = 0;
 
   ['dog','cat'].forEach(type => {
-  const allPets = data[type] || [];
+    const typePets = data[type] || [];
+    typePets.forEach((pet, petIdx) => {
+      if (!bulkTargetIds.has(`${type}-${pet.id}`)) return;
+      const key = `${type}-${pet.id}`;
+      const p = ensurePetHospitalFields(typePets[petIdx]);
 
-  allPets.forEach(pet => {
-    // bulkTargetIdsに含まれているかで対象を判定
-    if (!bulkTargetIds.has(`${type}-${pet.id}`)) return;
+      const date       = document.getElementById(`bulk-ind-date-${key}`)?.value || '';
+      const hospitalId = document.getElementById(`bulk-ind-hospital-${key}`)?.value || '';
+      const recType    = document.getElementById(`bulk-ind-type-${key}`)?.value || 'medical';
+      const doctor     = getBulkIndDoctorValue(key);
+      const cost       = document.getElementById(`bulk-ind-cost-${key}`)?.value || '';
+      const recWeight  = (document.getElementById(`bulk-ind-weight-${key}`)?.value || '').trim();
+      const nail       = document.getElementById(`bulk-ind-nail-${key}`)?.checked || false;
+      const tooth      = document.getElementById(`bulk-ind-tooth-${key}`)?.checked || false;
+      const flea       = document.getElementById(`bulk-ind-flea-${key}`)?.checked || false;
+      const notes      = (document.getElementById(`bulk-ind-notes-${key}`)?.value || '').trim();
 
-    const petIdx = allPets.findIndex(p => p.id === pet.id);
-    if (petIdx === -1) return;
-    const p = ensurePetHospitalFields(allPets[petIdx]);
-
-    const recWeight = (document.getElementById('bulk-weight-' + type + '-' + pet.id)?.value || '').trim();
-    const nailChecked = document.getElementById('bulk-nail-' + pet.id)?.checked || false;
-    const toothChecked = document.getElementById('bulk-tooth-' + pet.id)?.checked || false;
-    const fleaChecked = document.getElementById('bulk-flea-' + pet.id)?.checked || false;
-    const notes = (document.getElementById('bulk-notes-' + type + '-' + pet.id)?.value || '').trim();
-
-    const recData = {
-      id: 'med_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
-      date,
-      type: 'medical',
-      hospitalId,
-      doctor: '',
-      cost: sharedCost ? Number(sharedCost) : '',
-      notes,
-      photo: null,
-      weight: recWeight ? Number(recWeight) : '',
-      cares: { nail: nailChecked, tooth: toothChecked, flea: fleaChecked },
-      vaccineName: '',
-      antibodyVals: null
-    };
-
-    p.medicalRecords.push(recData);
-
-    if (recWeight) {
-      const wVal = Number(recWeight);
-      const existingWIdx = p.weightHistory.findIndex(w => w.date === date);
-      if (existingWIdx !== -1) {
-        p.weightHistory[existingWIdx].weight = wVal;
-      } else {
-        p.weightHistory.push({ id: 'w_' + Date.now() + '_' + Math.random().toString(36).substr(2,5), date, weight: wVal });
+      // ワクチン情報収集
+      let vaccineName = '';
+      let antibodyVals = null;
+      if (recType === 'vaccine') {
+        const vSel = document.getElementById(`bulk-ind-vaccine-select-${key}`);
+        if (vSel) {
+          if (vSel.value === 'custom') {
+            vaccineName = (document.getElementById(`bulk-ind-vaccine-custom-${key}`)?.value || '').trim();
+          } else {
+            vaccineName = vSel.value;
+          }
+          if (vSel.value === '抗体価検査済') {
+            antibodyVals = {
+              val1: document.getElementById(`bulk-ind-ab1-${key}`)?.value.trim() || '',
+              val2: document.getElementById(`bulk-ind-ab2-${key}`)?.value.trim() || '',
+              val3: document.getElementById(`bulk-ind-ab3-${key}`)?.value.trim() || '',
+            };
+          }
+        }
       }
-      const sortedHistory = [...p.weightHistory].sort((a,b) => b.date.localeCompare(a.date));
-      if (sortedHistory.length > 0) p.weight = String(sortedHistory[0].weight);
-    }
 
-    if (nailChecked || toothChecked || fleaChecked) {
-      if (!p.quickCares[date]) p.quickCares[date] = {};
-      if (nailChecked) p.quickCares[date].nail = true;
-      if (toothChecked) p.quickCares[date].tooth = true;
-      if (fleaChecked) p.quickCares[date].flea = true;
-    }
+      const recData = {
+        id: 'med_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
+        date, type: recType, hospitalId, doctor,
+        cost: cost ? Number(cost) : '',
+        notes, photo: null,
+        weight: recWeight ? Number(recWeight) : '',
+        cares: { nail, tooth, flea },
+        vaccineName, antibodyVals
+      };
+      p.medicalRecords.push(recData);
 
-    allPets[petIdx] = p;
-    savedCount++;
-  });
-  data[type] = allPets;
+      if (recWeight) {
+        const wVal = Number(recWeight);
+        const ewIdx = p.weightHistory.findIndex(w => w.date === date);
+        if (ewIdx !== -1) { p.weightHistory[ewIdx].weight = wVal; }
+        else { p.weightHistory.push({ id:'w_'+Date.now()+'_'+Math.random().toString(36).substr(2,5), date, weight:wVal }); }
+        const sh = [...p.weightHistory].sort((a,b) => b.date.localeCompare(a.date));
+        if (sh.length > 0) p.weight = String(sh[0].weight);
+      }
+
+      if (nail || tooth || flea) {
+        if (!p.quickCares[date]) p.quickCares[date] = {};
+        if (nail)  p.quickCares[date].nail  = true;
+        if (tooth) p.quickCares[date].tooth = true;
+        if (flea)  p.quickCares[date].flea  = true;
+      }
+
+      // ワクチンの場合は証明書にも自動同期
+      if (recType === 'vaccine' && vaccineName) {
+        let certKey = null;
+        if (vaccineName === '狂犬病予防注射') certKey = 'rabies';
+        else if (vaccineName === '抗体価検査済') certKey = 'antibody';
+        else if (vaccineName) certKey = 'vaccine';
+        if (certKey) {
+          if (!p.certificates) p.certificates = {};
+          const ec = p.certificates[certKey];
+          if (!ec || ec.date <= date) {
+            const nc = { date, photo: null };
+            if (certKey === 'vaccine') nc.name = vaccineName;
+            if (certKey === 'antibody' && antibodyVals) {
+              nc.abVal1 = antibodyVals.val1; nc.abVal2 = antibodyVals.val2; nc.abVal3 = antibodyVals.val3;
+            }
+            p.certificates[certKey] = nc;
+          }
+        }
+      }
+
+      typePets[petIdx] = p;
+      savedCount++;
+    });
+    data[type] = typePets;
   });
 
   saveData(data);
   closeModal(null, 'modal-bulk-medical');
 
-  // 現在開いているペットの画面を更新
   if (currentPetId) {
     renderMedicalTimeline();
     renderWeightSection();
     renderQuickCares();
     renderCareCalendar();
+    renderCertificates();
   }
-
   showToast(`${savedCount}頭分の通院記録を保存しました ✓`);
 }
 

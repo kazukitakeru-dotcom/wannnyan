@@ -680,18 +680,48 @@
         <button class="modal-close" onclick="closeModal(null,'modal-bulk-medical')">✕</button>
       </div>
       <div class="modal-body">
-        <p class="field-age-note" style="margin-bottom:10px;">共通の日付・病院を設定し、各ペットごとに体重・ケア・メモを個別入力して一括保存できます。</p>
+        <p class="field-age-note" style="margin-bottom:10px;">共通の値を設定して「同期」を押すと各ペットに一括反映できます。各ペット行を開いて個別に上書きも可能です。</p>
 
-        <label class="field-label">日付 <span class="required">*</span></label>
-        <input type="date" id="bulk-m-date" class="field-input">
+        <label class="field-label">日付（共通初期値）</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+          <input type="date" id="bulk-m-date" class="field-input" style="flex:1;margin-bottom:0;">
+          <button onclick="syncBulkField('date')"
+            style="border:none;background:rgba(200,132,74,0.15);color:var(--accent);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">同期</button>
+        </div>
 
-        <label class="field-label">病院 <span class="required">*</span></label>
-        <select id="bulk-m-hospital-select" class="field-input">
-          <option value="">-- 選択してください --</option>
-        </select>
+        <label class="field-label">病院（共通初期値）</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+          <select id="bulk-m-hospital-select" class="field-input" style="flex:1;margin-bottom:0;">
+            <option value="">-- 選択してください --</option>
+          </select>
+          <button onclick="syncBulkField('hospital')"
+            style="border:none;background:rgba(200,132,74,0.15);color:var(--accent);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">同期</button>
+        </div>
 
-        <label class="field-label">治療費（共通・任意）</label>
-        <input type="number" id="bulk-m-cost" class="field-input" placeholder="例: 5400" min="0">
+        <label class="field-label">治療費（共通初期値・任意）</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+          <input type="number" id="bulk-m-cost" class="field-input" placeholder="例: 5400" min="0"
+            style="flex:1;margin-bottom:0;">
+          <button onclick="syncBulkField('cost')"
+            style="border:none;background:rgba(200,132,74,0.15);color:var(--accent);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">同期</button>
+        </div>
+
+        <label class="field-label">日常ケア（共通初期値）</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+          <div style="display:flex;gap:12px;flex:1;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
+              <input type="checkbox" id="bulk-m-care-nail"> 💅 爪切り
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
+              <input type="checkbox" id="bulk-m-care-tooth"> 🪥 歯磨き
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
+              <input type="checkbox" id="bulk-m-care-flea"> 💊 ノミダニ
+            </label>
+          </div>
+          <button onclick="syncBulkField('care')"
+            style="border:none;background:rgba(200,132,74,0.15);color:var(--accent);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">同期</button>
+        </div>
 
         <p class="issue-memo-label" style="margin-top:10px;margin-bottom:6px;">対象のペット（タップで個別入力展開）</p>
         <div id="bulk-pets-list" style="display:flex;flex-direction:column;gap:8px;"></div>
