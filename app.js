@@ -433,7 +433,7 @@ function compressAndLoad(file, callback) {
 function _compressFromDataUrl(src, callback) {
   const img=new Image();
   img.onload=()=>{
-    const MAX=1400;
+    const MAX=800;
     let w=img.width, h=img.height;
     if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
     const canvas=document.createElement('canvas');
@@ -442,7 +442,7 @@ function _compressFromDataUrl(src, callback) {
     ctx.drawImage(img,0,0,w,h);
     // JPEG変換できた場合はJPEGで、できなければ元データをそのまま返す
     try {
-      const out = canvas.toDataURL('image/jpeg', 0.85);
+      const out = canvas.toDataURL('image/jpeg', 0.72);
       callback(out && out.length > 100 ? out : src);
     } catch(_) {
       callback(src);
