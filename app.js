@@ -452,6 +452,7 @@ function _compressFromDataUrl(src, callback) {
 }
 
 // インポート時に壊れた画像データを修復してから保存する（Promise対応・完全非同期）
+// 旧バックアップデータで読み込めない画像はnullに置き換えて他のデータを守る
 function sanitizeImportedPhotos(data) {
   const tasks = [];
   ['dog','cat'].forEach(type => {
@@ -459,14 +460,36 @@ function sanitizeImportedPhotos(data) {
       // ペットのメイン写真を修復（圧縮し直す）
       if (pet.photo && pet.photo.startsWith('data:')) {
         tasks.push(new Promise(resolve => {
-          _compressFromDataUrl(pet.photo, fixed => { pet.photo = fixed; resolve(); });
+          // タイムアウト付き：5秒で応答なければ元データを保持
+          let settled = false;
+          const timer = setTimeout(() => {
+            if (!settled) { settled = true; resolve(); }
+          }, 5000);
+          _compressFromDataUrl(pet.photo, fixed => {
+            if (!settled) {
+              settled = true;
+              clearTimeout(timer);
+              // 圧縮結果が短すぎる（壊れている）場合はnullにせず元データを保持
+              pet.photo = (fixed && fixed.length > 200) ? fixed : pet.photo;
+              resolve();
+            }
+          });
         }));
       }
       // 通院記録の写真も同様に修復
       (pet.medicalRecords||[]).forEach(rec => {
         if (rec.photo && rec.photo.startsWith('data:')) {
           tasks.push(new Promise(resolve => {
-            _compressFromDataUrl(rec.photo, fixed => { rec.photo = fixed; resolve(); });
+            let settled = false;
+            const timer = setTimeout(() => { if (!settled) { settled = true; resolve(); } }, 5000);
+            _compressFromDataUrl(rec.photo, fixed => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                rec.photo = (fixed && fixed.length > 200) ? fixed : rec.photo;
+                resolve();
+              }
+            });
           }));
         }
       });
@@ -476,7 +499,16 @@ function sanitizeImportedPhotos(data) {
           const cert = pet.certificates[k];
           if (cert && cert.photo && cert.photo.startsWith('data:')) {
             tasks.push(new Promise(resolve => {
-              _compressFromDataUrl(cert.photo, fixed => { cert.photo = fixed; resolve(); });
+              let settled = false;
+              const timer = setTimeout(() => { if (!settled) { settled = true; resolve(); } }, 5000);
+              _compressFromDataUrl(cert.photo, fixed => {
+                if (!settled) {
+                  settled = true;
+                  clearTimeout(timer);
+                  cert.photo = (fixed && fixed.length > 200) ? fixed : cert.photo;
+                  resolve();
+                }
+              });
             }));
           }
         });
@@ -934,11 +966,29 @@ function confirmDelete(){
 // ========== データ引き継ぎ ==========
 function openTransferModal(){ document.getElementById('modal-transfer').classList.add('open'); }
 function exportData(){
+  const petData = loadData();
+  const hospitals = loadHospitals();
+
+  // 旧データ移行: ペット内に残っているhospitalsをエクスポート前に共通ストアに吸収
+  ['dog','cat'].forEach(type => {
+    (petData[type]||[]).forEach(pet => {
+      if (Array.isArray(pet.hospitals) && pet.hospitals.length > 0) {
+        const shared = loadHospitals();
+        const sharedIds = new Set(shared.map(h => h.id));
+        let added = false;
+        pet.hospitals.forEach(h => {
+          if (h && !sharedIds.has(h.id)) { shared.push(h); added = true; }
+        });
+        if (added) saveHospitals(shared);
+      }
+    });
+  });
+
   const exportPayload = {
     version: 3,
     exportedAt: Date.now(),
-    pets: loadData(),
-    hospitals: loadHospitals()
+    pets: petData,
+    hospitals: loadHospitals()  // 移行後の最新値を取得
   };
 
   const json=JSON.stringify(exportPayload,null,2);
@@ -976,9 +1026,21 @@ function importData(event){
       const raw=JSON.parse(e.target.result);
 
       // 新旧形式対応
-      const petData = raw.pets || raw;
+      // version3: { version:3, pets:{dog,cat}, hospitals:[] }
+      // version2以前: { dog:[], cat:[], hospitals:[] } または { dog:[], cat:[] }
+      // 最旧: { dog:[], cat:[] } でpetにhospitalsが混在
+      let petData = null;
+      if (raw.pets && (raw.pets.dog !== undefined || raw.pets.cat !== undefined)) {
+        petData = raw.pets;
+      } else if (raw.dog !== undefined || raw.cat !== undefined) {
+        petData = raw;
+      }
 
-      if(!petData.dog || !petData.cat) throw new Error();
+      if(!petData || (petData.dog === undefined && petData.cat === undefined)) throw new Error('invalid format');
+
+      // dogとcatを確実に配列に
+      if (!Array.isArray(petData.dog)) petData.dog = [];
+      if (!Array.isArray(petData.cat)) petData.cat = [];
 
       if(!confirm('現在のデータに上書きします。よろしいですか？'))return;
 
@@ -989,18 +1051,27 @@ function importData(event){
             ...p,
             medicalRecords: Array.isArray(p.medicalRecords) ? p.medicalRecords : [],
             weightHistory: Array.isArray(p.weightHistory) ? p.weightHistory : [],
-            certificates: p.certificates || {},
-            quickCares: p.quickCares || {}
+            certificates: (p.certificates && typeof p.certificates === 'object') ? p.certificates : {},
+            quickCares: (p.quickCares && typeof p.quickCares === 'object') ? p.quickCares : {},
+            medicines: Array.isArray(p.medicines) ? p.medicines : [],
+            medicineLogs: (p.medicineLogs && typeof p.medicineLogs === 'object') ? p.medicineLogs : {},
           }));
         });
 
         saveData(fixedData);
 
         // 病院データ復元
+        // 優先順位: raw.hospitals > petData内の各ペットのp.hospitals（旧形式）
         let hospitals = [];
-        if (Array.isArray(raw.hospitals)) {
+
+        if (Array.isArray(raw.hospitals) && raw.hospitals.length > 0) {
+          // version3形式: トップレベルに hospitals がある
           hospitals = raw.hospitals;
+        } else if (Array.isArray(petData.hospitals) && petData.hospitals.length > 0) {
+          // ルートにhospitalsがある形式
+          hospitals = petData.hospitals;
         } else {
+          // 最旧形式: 各ペットに hospitals が混在していた
           const collected = [];
           ['dog','cat'].forEach(type => {
             (fixedData[type] || []).forEach(p => {
@@ -1012,23 +1083,53 @@ function importData(event){
           hospitals = collected;
         }
 
-        const uniqueHospitals = [];
-        const seen = new Set();
+        // 既存の共通病院ストアと合わせて重複排除（IDと名前で両方チェック）
+        const currentHospitals = loadHospitals();
+        const merged = [...currentHospitals];
+        const seenIds = new Set(merged.map(h => h.id).filter(Boolean));
+        const seenNames = new Set(merged.map(h => h.name).filter(Boolean));
 
         hospitals.forEach(h => {
-          const key = h.id || h.name;
-          if (!key || seen.has(key)) return;
-          seen.add(key);
-          uniqueHospitals.push(h);
+          if (!h) return;
+          if (!h.priceList) h.priceList = [];
+          if (!Array.isArray(h.doctors)) h.doctors = h.doctor ? [{ id: 'legacy', name: h.doctor }] : [];
+          // IDで重複チェック（IDがある場合）
+          if (h.id && seenIds.has(h.id)) return;
+          // 名前で重複チェック（IDがない場合も含む）
+          if (h.name && seenNames.has(h.name)) return;
+          if (h.id) seenIds.add(h.id);
+          if (h.name) seenNames.add(h.name);
+          merged.push(h);
         });
 
-        saveHospitals(uniqueHospitals);
+        // インポートしたデータを優先する場合は merged ではなく直接 hospitals を使う
+        // ここでは「上書き」モードなので、インポートのhospitalsで既存を置き換える
+        const finalHospitals = [];
+        const finalSeen = new Set();
+        hospitals.forEach(h => {
+          if (!h) return;
+          if (!h.priceList) h.priceList = [];
+          if (!Array.isArray(h.doctors)) h.doctors = h.doctor ? [{ id: 'legacy', name: h.doctor }] : [];
+          const key = h.id || h.name;
+          if (!key || finalSeen.has(key)) return;
+          finalSeen.add(key);
+          finalHospitals.push(h);
+        });
+
+        // インポートに病院データがあればそれで上書き、なければ現在のデータを保持
+        if (finalHospitals.length > 0) {
+          saveHospitals(finalHospitals);
+        }
+        // 病院データが空の旧バックアップでも現在の病院データを消さない（何もしない）
 
         closeModal(null,'modal-transfer');
         showToast('インポートしました ✓');
         if(currentType)renderList();
       });
-    }catch(err){ alert('ファイルが正しくありません。'); }
+    }catch(err){
+      console.error('Import error:', err);
+      alert('ファイルが正しくありません。わんにゃんメモリーのバックアップファイルを選択してください。');
+    }
   };
   reader.readAsText(file);
   event.target.value='';
@@ -2107,22 +2208,15 @@ function toggleYearGroup(year) {
   if (el) el.classList.toggle('open');
 }
 
-function toggleYearGroup(year) {
-  const el = document.getElementById(`year-group-${year}`);
-  if (el) el.classList.toggle('open');
-}
-
 // ========== まとめて通院記録 ==========
 let bulkSyncValues = {}; // 同期中の共通値
+let bulkTargetIds = new Set(); // 現在表示中のペットIDセット
 
 function openBulkMedicalModal() {
   const data = loadData();
 
   const currentPets = (data[currentType] || []);
   if (currentPets.length === 0) { alert('ペットが登録されていません'); return; }
-
-  const activePet = currentPets.find(p => p.id === currentPetId);
-  const targetFamilyTag = currentFamilyTagFilter || activePet?.familyTag || null;
 
   bulkSyncValues = {};
   document.getElementById('bulk-m-date').value = new Date().toISOString().split('T')[0];
@@ -2132,17 +2226,38 @@ function openBulkMedicalModal() {
   document.getElementById('bulk-m-hospital-select').value = '';
   document.getElementById('bulk-m-cost').value = '';
 
-  let filtered = [
+  // 全ペット一覧（dog+cat）
+  const allPets = [
     ...(data.dog || []).map(p => ({...p, petType:'dog'})),
     ...(data.cat || []).map(p => ({...p, petType:'cat'}))
   ];
 
-  if (targetFamilyTag) {
-    filtered = filtered.filter(p => (p.familyTag || '') === targetFamilyTag);
+  // 初期表示: 家族タグがある子のみ（なければ全員）
+  const hasFamilyTag = allPets.filter(p => p.familyTag);
+  const initialTargets = hasFamilyTag.length > 0 ? hasFamilyTag : allPets;
+
+  // 現在のペットIDセットを初期化
+  bulkTargetIds = new Set(initialTargets.map(p => `${p.petType}-${p.id}`));
+
+  renderBulkPetsList(allPets);
+  document.getElementById('modal-bulk-medical').classList.add('open');
+}
+
+function renderBulkPetsList(allPets) {
+  if (!allPets) {
+    const data = loadData();
+    allPets = [
+      ...(data.dog || []).map(p => ({...p, petType:'dog'})),
+      ...(data.cat || []).map(p => ({...p, petType:'cat'}))
+    ];
   }
 
+  const inTargets = allPets.filter(p => bulkTargetIds.has(`${p.petType}-${p.id}`));
+  const notInTargets = allPets.filter(p => !bulkTargetIds.has(`${p.petType}-${p.id}`));
+
   const list = document.getElementById('bulk-pets-list');
-  list.innerHTML = filtered.map(pet => `
+
+  let html = inTargets.map(pet => `
     <div class="bulk-pet-row" id="bulk-row-${pet.petType}-${pet.id}">
       <div class="bulk-pet-row-header" onclick="toggleBulkPetRow('${pet.petType}-${pet.id}')">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -2153,9 +2268,6 @@ function openBulkMedicalModal() {
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <label onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:var(--accent);">
-            <input type="checkbox" id="bulk-include-${pet.petType}-${pet.id}" checked> 対象
-          </label>
           <button onclick="event.stopPropagation();removeBulkTarget('${pet.petType}-${pet.id}')" style="border:none;background:#f3d6d6;color:#b44;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">除外</button>
           <span style="font-size:16px;color:var(--text-light);">›</span>
         </div>
@@ -2171,13 +2283,47 @@ function openBulkMedicalModal() {
     </div>
   `).join('');
 
-  document.getElementById('modal-bulk-medical').classList.add('open');
+  // 追加可能な子のセクション
+  if (notInTargets.length > 0) {
+    html += `
+      <div style="margin-top:10px; border-top:1px dashed rgba(44,36,24,0.12); padding-top:10px;">
+        <p style="font-size:11px;font-weight:700;color:var(--text-light);margin-bottom:6px;">追加できる子</p>
+        ${notInTargets.map(pet => `
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(44,36,24,0.05);">
+            <span style="font-size:18px;">${pet.petType==='dog'?'🐕':'🐈'}</span>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:700;color:var(--text-dark);">${escHtml(pet.name)}</div>
+              <div style="font-size:11px;color:var(--text-light);">${escHtml(pet.familyTag || '家族タグなし')}</div>
+            </div>
+            <button onclick="addBulkTarget('${pet.petType}','${pet.id}')" style="border:none;background:rgba(200,132,74,0.15);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">追加</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  list.innerHTML = html;
+}
+
+function addBulkTarget(petType, petId) {
+  bulkTargetIds.add(`${petType}-${petId}`);
+  const data = loadData();
+  const allPets = [
+    ...(data.dog || []).map(p => ({...p, petType:'dog'})),
+    ...(data.cat || []).map(p => ({...p, petType:'cat'}))
+  ];
+  renderBulkPetsList(allPets);
 }
 
 function removeBulkTarget(id) {
   if (!confirm('この子を今回のまとめ記録対象から外しますか？')) return;
-  const row = document.getElementById('bulk-row-' + id);
-  if (row) row.remove();
+  bulkTargetIds.delete(id);
+  const data = loadData();
+  const allPets = [
+    ...(data.dog || []).map(p => ({...p, petType:'dog'})),
+    ...(data.cat || []).map(p => ({...p, petType:'cat'}))
+  ];
+  renderBulkPetsList(allPets);
 }
 
 function toggleBulkPetRow(petId) {
@@ -2199,8 +2345,8 @@ function saveBulkMedicalRecord() {
   const allPets = data[type] || [];
 
   allPets.forEach(pet => {
-    const checkbox = document.getElementById('bulk-include-' + type + '-' + pet.id);
-    if (!checkbox || !checkbox.checked) return;
+    // bulkTargetIdsに含まれているかで対象を判定
+    if (!bulkTargetIds.has(`${type}-${pet.id}`)) return;
 
     const petIdx = allPets.findIndex(p => p.id === pet.id);
     if (petIdx === -1) return;
@@ -3690,7 +3836,8 @@ function startWalkTimer(petId) {
     startTs: Date.now()
   };
   saveWalkTimerState(state);
-  tickWalkTimer();
+  // 即座にタイマーUIを描画してからtickを開始
+  renderWalkTimer();
 }
 
 function stopWalkTimer() {
@@ -3736,6 +3883,10 @@ function tickWalkTimer() {
       disp.innerHTML = `
         <div class="walk-timer-elapsed">${String(em).padStart(2,'0')}:${String(es).padStart(2,'0')}</div>
       `;
+    } else {
+      // 表示要素がない場合（画面が切り替わった等）はタイマーを止める
+      clearInterval(walkTimerInterval);
+      walkTimerInterval = null;
     }
   };
   update();
@@ -3782,21 +3933,50 @@ function renderWalkTimer() {
     </div>
   `;
 
+  // 散歩記録サマリーを生成（過去7日分）
+  function buildWalkHistoryHtml() {
+    if (!pet) return '';
+    ensurePetHospitalFields(pet);
+    const today = new Date();
+    const rows = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const mins = (pet.quickCares[dateStr] || {}).walkMinutes;
+      if (mins !== undefined && mins > 0) {
+        rows.push(`<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:3px 0;border-bottom:1px solid rgba(44,36,24,0.05);"><span>${formatDate(dateStr)}</span><span style="color:var(--accent)">🐾 ${mins}分</span></div>`);
+      }
+    }
+    if (rows.length === 0) return '<div style="font-size:12px;color:var(--text-light);padding:4px 0;">直近7日間の散歩記録はありません</div>';
+    return `<div style="margin-top:8px;background:rgba(44,36,24,0.03);border-radius:8px;padding:8px 10px;">${rows.join('')}</div>`;
+  }
+
   if (state && state.petId === petId) {
     container.innerHTML = `
       ${envHtml}
       <div id="walk-timer-display" class="walk-timer-display"></div>
       <button class="walk-timer-stop-btn" onclick="stopWalkTimer()">🏁 散歩終了</button>
     `;
+    // 即座に表示してからインターバル開始
     tickWalkTimer();
   } else {
+    const histHtml = buildWalkHistoryHtml();
     container.innerHTML = `
       ${envHtml}
-      <div style="margin-top:10px;">
-        <button class="walk-timer-start-btn" onclick="startWalkTimer('${petId}')">🐾 散歩スタート</button>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+        <button class="walk-timer-start-btn" onclick="startWalkTimer('${petId}')" style="flex:1;">🐾 散歩スタート</button>
+        <button onclick="toggleWalkHistory()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📋 散歩記録</button>
       </div>
+      <div id="walk-history-panel" style="display:none;">${histHtml}</div>
     `;
   }
+}
+
+function toggleWalkHistory() {
+  const panel = document.getElementById('walk-history-panel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
 function saveWalkEnv() {
