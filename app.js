@@ -934,16 +934,38 @@ function confirmDelete(){
 // ========== データ引き継ぎ ==========
 function openTransferModal(){ document.getElementById('modal-transfer').classList.add('open'); }
 function exportData(){
-  const data=loadData();
-  const json=JSON.stringify(data,null,2);
+  const exportPayload = {
+    version: 3,
+    exportedAt: Date.now(),
+    pets: loadData(),
+    hospitals: loadHospitals()
+  };
+
+  const json=JSON.stringify(exportPayload,null,2);
   const blob=new Blob([json],{type:'application/json'});
+  const fileName=`wannyan_backup_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
+
+  // iPhone Safari対策
+  if (navigator.share && navigator.canShare) {
+    const file = new File([blob], fileName, { type:'application/json' });
+    navigator.share({ files:[file], title:'わんにゃんメモリー バックアップ' })
+      .then(()=>showToast('エクスポートしました ✓'))
+      .catch(()=>{});
+    return;
+  }
+
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  const d=new Date();
   a.href=url;
-  a.download=`wannyan_backup_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+  a.download=fileName;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+
+  setTimeout(()=>{
+    URL.revokeObjectURL(url);
+    a.remove();
+  },1000);
+
   showToast('エクスポートしました ✓');
 }
 function importData(event){
@@ -951,19 +973,57 @@ function importData(event){
   const reader=new FileReader();
   reader.onload=e=>{
     try{
-      const data=JSON.parse(e.target.result);
-      if(!data.dog||!data.cat)throw new Error();
+      const raw=JSON.parse(e.target.result);
+
+      // 新旧形式対応
+      const petData = raw.pets || raw;
+
+      if(!petData.dog || !petData.cat) throw new Error();
+
       if(!confirm('現在のデータに上書きします。よろしいですか？'))return;
-      // 古いデータで壊れていた画像を再圧縮して修復してから保存（完全非同期Promise）
-      sanitizeImportedPhotos(data).then(fixedData => {
+
+      sanitizeImportedPhotos(petData).then(fixedData => {
+
+        ['dog','cat'].forEach(type => {
+          fixedData[type] = (fixedData[type] || []).map(p => ({
+            ...p,
+            medicalRecords: Array.isArray(p.medicalRecords) ? p.medicalRecords : [],
+            weightHistory: Array.isArray(p.weightHistory) ? p.weightHistory : [],
+            certificates: p.certificates || {},
+            quickCares: p.quickCares || {}
+          }));
+        });
+
         saveData(fixedData);
-        // 共通病院データも移行
-        if(fixedData.hospitals){
-          const cur = loadHospitals();
-          const ids = new Set(cur.map(h=>h.id));
-          fixedData.hospitals.filter(h=>!ids.has(h.id)).forEach(h=>cur.push(h));
-          saveHospitals(cur);
+
+        // 病院データ復元
+        let hospitals = [];
+        if (Array.isArray(raw.hospitals)) {
+          hospitals = raw.hospitals;
+        } else {
+          const collected = [];
+          ['dog','cat'].forEach(type => {
+            (fixedData[type] || []).forEach(p => {
+              if (Array.isArray(p.hospitals)) {
+                collected.push(...p.hospitals);
+              }
+            });
+          });
+          hospitals = collected;
         }
+
+        const uniqueHospitals = [];
+        const seen = new Set();
+
+        hospitals.forEach(h => {
+          const key = h.id || h.name;
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          uniqueHospitals.push(h);
+        });
+
+        saveHospitals(uniqueHospitals);
+
         closeModal(null,'modal-transfer');
         showToast('インポートしました ✓');
         if(currentType)renderList();
@@ -976,6 +1036,7 @@ function importData(event){
 function confirmReset(){
   if(!confirm('全データを削除します。この操作は取り消せません。よろしいですか？'))return;
   localStorage.removeItem('wannyan_v2');
+  localStorage.removeItem('wannyan_hospitals_v1');
   closeModal(null,'modal-transfer');
   showToast('データをリセットしました');
   if(currentType)renderList();
@@ -2056,10 +2117,13 @@ let bulkSyncValues = {}; // 同期中の共通値
 
 function openBulkMedicalModal() {
   const data = loadData();
-  const allPets = (data[currentType] || []);
-  if (allPets.length === 0) { alert('ペットが登録されていません'); return; }
 
-  // 共通フィールドの初期化
+  const currentPets = (data[currentType] || []);
+  if (currentPets.length === 0) { alert('ペットが登録されていません'); return; }
+
+  const activePet = currentPets.find(p => p.id === currentPetId);
+  const targetFamilyTag = currentFamilyTagFilter || activePet?.familyTag || null;
+
   bulkSyncValues = {};
   document.getElementById('bulk-m-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('bulk-m-hospital-select').innerHTML =
@@ -2068,50 +2132,52 @@ function openBulkMedicalModal() {
   document.getElementById('bulk-m-hospital-select').value = '';
   document.getElementById('bulk-m-cost').value = '';
 
-  // フィルターされているペットたちを使う（currentFamilyTagFilter適用済みリスト）
-  const rawSearch = document.getElementById('search-input')?.value.trim() || '';
-  const search = toHiragana(rawSearch).toLowerCase();
-  let filtered = search ? allPets.filter(p =>
-    toHiragana(p.name||'').toLowerCase().includes(search) ||
-    toHiragana(p.breed||'').toLowerCase().includes(search)
-  ) : allPets;
-  if (currentFamilyTagFilter) {
-    filtered = filtered.filter(p => (p.familyTag||'') === currentFamilyTagFilter);
+  let filtered = [
+    ...(data.dog || []).map(p => ({...p, petType:'dog'})),
+    ...(data.cat || []).map(p => ({...p, petType:'cat'}))
+  ];
+
+  if (targetFamilyTag) {
+    filtered = filtered.filter(p => (p.familyTag || '') === targetFamilyTag);
   }
 
   const list = document.getElementById('bulk-pets-list');
   list.innerHTML = filtered.map(pet => `
-    <div class="bulk-pet-row" id="bulk-row-${pet.id}">
-      <div class="bulk-pet-row-header" onclick="toggleBulkPetRow('${pet.id}')">
+    <div class="bulk-pet-row" id="bulk-row-${pet.petType}-${pet.id}">
+      <div class="bulk-pet-row-header" onclick="toggleBulkPetRow('${pet.petType}-${pet.id}')">
         <div style="display:flex;align-items:center;gap:8px;">
-          <div class="bulk-pet-photo">${pet.photo ? `<img src="${pet.photo}" alt="">` : (currentType==='dog'?'🐕':'🐈')}</div>
-          <span style="font-weight:700;font-size:14px;color:var(--text-dark);">${escHtml(pet.name)}</span>
+          <div class="bulk-pet-photo" style="background:none;font-size:24px;width:auto;height:auto;">${pet.petType==='dog'?'🐕':'🐈'}</div>
+          <div>
+            <div style="font-weight:700;font-size:14px;color:var(--text-dark);">${escHtml(pet.name)}</div>
+            <div style="font-size:11px;color:var(--text-light);">${escHtml(pet.familyTag || '家族タグなし')}</div>
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <label onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:var(--accent);">
-            <input type="checkbox" id="bulk-include-${pet.id}" checked onchange="renderBulkPetRow('${pet.id}')"> 対象
+            <input type="checkbox" id="bulk-include-${pet.petType}-${pet.id}" checked> 対象
           </label>
+          <button onclick="event.stopPropagation();removeBulkTarget('${pet.petType}-${pet.id}')" style="border:none;background:#f3d6d6;color:#b44;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">除外</button>
           <span style="font-size:16px;color:var(--text-light);">›</span>
         </div>
       </div>
-      <div class="bulk-pet-row-body" id="bulk-body-${pet.id}" style="display:none;">
+      <div class="bulk-pet-row-body" id="bulk-body-${pet.petType}-${pet.id}" style="display:none;">
         <div style="padding:10px 0 0 0;">
           <label class="field-label" style="font-size:11px;">体重 (kg)</label>
-          <input type="number" id="bulk-weight-${pet.id}" class="field-input" placeholder="例: 4.5" step="0.01" min="0" style="margin-bottom:6px;">
-          <label class="field-label" style="font-size:11px;">日常ケア</label>
-          <div style="display:flex;gap:8px;margin-bottom:6px;">
-            <label style="display:flex;align-items:center;gap:3px;font-size:12px;font-weight:700;"><input type="checkbox" id="bulk-nail-${pet.id}"> 💅爪切り</label>
-            <label style="display:flex;align-items:center;gap:3px;font-size:12px;font-weight:700;"><input type="checkbox" id="bulk-tooth-${pet.id}"> 🪥歯磨き</label>
-            <label style="display:flex;align-items:center;gap:3px;font-size:12px;font-weight:700;"><input type="checkbox" id="bulk-flea-${pet.id}"> 💊ノミダニ</label>
-          </div>
+          <input type="number" id="bulk-weight-${pet.petType}-${pet.id}" class="field-input" placeholder="例: 4.5" step="0.01" min="0" style="margin-bottom:6px;">
           <label class="field-label" style="font-size:11px;">メモ（この子だけ）</label>
-          <textarea id="bulk-notes-${pet.id}" class="field-input" rows="2" placeholder="個別の症状・診療内容など…" style="margin-bottom:0;"></textarea>
+          <textarea id="bulk-notes-${pet.petType}-${pet.id}" class="field-input" rows="2"></textarea>
         </div>
       </div>
     </div>
   `).join('');
 
   document.getElementById('modal-bulk-medical').classList.add('open');
+}
+
+function removeBulkTarget(id) {
+  if (!confirm('この子を今回のまとめ記録対象から外しますか？')) return;
+  const row = document.getElementById('bulk-row-' + id);
+  if (row) row.remove();
 }
 
 function toggleBulkPetRow(petId) {
@@ -2127,22 +2193,24 @@ function saveBulkMedicalRecord() {
 
   const sharedCost = document.getElementById('bulk-m-cost').value;
   const data = loadData();
-  const allPets = data[currentType] || [];
   let savedCount = 0;
 
+  ['dog','cat'].forEach(type => {
+  const allPets = data[type] || [];
+
   allPets.forEach(pet => {
-    const checkbox = document.getElementById('bulk-include-' + pet.id);
+    const checkbox = document.getElementById('bulk-include-' + type + '-' + pet.id);
     if (!checkbox || !checkbox.checked) return;
 
     const petIdx = allPets.findIndex(p => p.id === pet.id);
     if (petIdx === -1) return;
     const p = ensurePetHospitalFields(allPets[petIdx]);
 
-    const recWeight = (document.getElementById('bulk-weight-' + pet.id)?.value || '').trim();
+    const recWeight = (document.getElementById('bulk-weight-' + type + '-' + pet.id)?.value || '').trim();
     const nailChecked = document.getElementById('bulk-nail-' + pet.id)?.checked || false;
     const toothChecked = document.getElementById('bulk-tooth-' + pet.id)?.checked || false;
     const fleaChecked = document.getElementById('bulk-flea-' + pet.id)?.checked || false;
-    const notes = (document.getElementById('bulk-notes-' + pet.id)?.value || '').trim();
+    const notes = (document.getElementById('bulk-notes-' + type + '-' + pet.id)?.value || '').trim();
 
     const recData = {
       id: 'med_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
@@ -2183,8 +2251,9 @@ function saveBulkMedicalRecord() {
     allPets[petIdx] = p;
     savedCount++;
   });
+  data[type] = allPets;
+  });
 
-  data[currentType] = allPets;
   saveData(data);
   closeModal(null, 'modal-bulk-medical');
 
