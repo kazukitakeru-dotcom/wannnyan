@@ -4235,6 +4235,19 @@ function closeModal(event, id){
   if(!event||event.target===event.currentTarget){
     document.getElementById(id).classList.remove('open');
     _detachModalViewportFix();
+    // iOS Safari でモーダル内 input にフォーカスが当たった際に
+    // 背面の detail-content がスクロールされてしまう問題を補正する
+    // モーダルを閉じた後、activeな画面のスクロール可能領域を現在位置に固定し直す
+    requestAnimationFrame(() => {
+      const activeScreen = document.querySelector('.screen.active');
+      if (!activeScreen) return;
+      const scrollable = activeScreen.querySelector('.detail-content, .pet-list, .folder-content');
+      if (!scrollable) return;
+      // 一度 scroll イベントを再発火させて iOS のレンダリングズレをリセット
+      const saved = scrollable.scrollTop;
+      scrollable.scrollTop = saved + 1;
+      scrollable.scrollTop = saved;
+    });
   }
 }
 

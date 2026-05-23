@@ -1,5 +1,6 @@
 /* ========== Reset & Base ========== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+input[type="date"].field-input { appearance: none; -webkit-appearance: none; min-width: 0; width: 100%; }
 :root {
   --cream: #faf6f0; --warm: #f5ede0;
   --dog-primary: #c8844a; --dog-light: #f0d4b4; --dog-dark: #8b5a2b;
@@ -93,7 +94,7 @@ html, body { height: 100%; font-family: var(--font); background: var(--cream); c
 .required { color: var(--red); }
 .field-value { font-size: 15px; font-weight: 700; min-height: 24px; line-height: 1.4; }
 .field-age-note { font-size: 11px; color: var(--text-light); margin-top: 2px; }
-.field-input { width: 100%; border: 1.5px solid rgba(44,36,24,0.12); border-radius: 10px; padding: 9px 11px; font-size: 15px; color: var(--text-dark); background: var(--cream); font-family: var(--font); outline: none; transition: border-color 0.2s; }
+.field-input { width: 100%; max-width: 100%; min-width: 0; border: 1.5px solid rgba(44,36,24,0.12); border-radius: 10px; padding: 9px 11px; font-size: 15px; color: var(--text-dark); background: var(--cream); font-family: var(--font); outline: none; transition: border-color 0.2s; }
 .field-input:focus { border-color: var(--accent); }
 textarea.field-input { resize: vertical; min-height: 76px; line-height: 1.6; }
 
