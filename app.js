@@ -1108,7 +1108,7 @@ function importData(event){
 
       if(!confirm('現在のデータに上書きします。よろしいですか？'))return;
 
-      sanitizeImportedPhotos(petData).then(fixedData => {
+      sanitizeImportedPhotos(petData).then(async fixedData => {
 
         ['dog','cat'].forEach(type => {
           fixedData[type] = (fixedData[type] || []).map(p => ({
@@ -2188,7 +2188,7 @@ async function renderMedicalTimeline() {
     const yearRecords = groups[year];
     
     const recordsHtml = yearRecords.map(rec => {
-      const hosp = getHospitals().find(h => h.id === rec.hospitalId);
+      const hosp = hospitals.find(h => h.id === rec.hospitalId);
       const hospName = hosp ? hosp.name : '不明な病院';
       const icon = rec.type === 'vaccine' ? '💉' : '🏥';
       const iconClass = rec.type === 'vaccine' ? 'vaccine-type' : '';
@@ -3491,7 +3491,8 @@ async function saveCertificateRecord() {
   }
 
   // 最新の通院記録から病院・担当医・体重を引き継ぐ
-  let inheritHospitalId = getHospitals()[0] ? getHospitals()[0].id : '';
+  const _hospList = await getHospitals();
+  let inheritHospitalId = _hospList[0] ? _hospList[0].id : '';
   let inheritDoctor = '';
   let inheritWeight = '';
   if (pet.medicalRecords.length > 0) {
@@ -3612,8 +3613,8 @@ function toggleMedicineSortMode() {
 }
 
 // 日常ケアのお薬服用カウンターセクションの描画（服用中のお薬のみ表示）
-function renderMedicineCareSection() {
-  const data = loadData();
+async function renderMedicineCareSection() {
+  const data = await loadData();
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
   if (!pet) return;
   
@@ -3678,10 +3679,10 @@ function renderMedicineCareSection() {
 }
 
 // お薬の服用回数の変更（＋/ーボタン）
-function changeMedicineCount(medId, delta, event) {
+async function changeMedicineCount(medId, delta, event) {
   if (event) event.stopPropagation(); // ボタンタップ時に親のモーダル表示を防止
   
-  const data = loadData();
+  const data = await loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
@@ -3705,7 +3706,7 @@ function changeMedicineCount(medId, delta, event) {
   
   pets[idx] = pet;
   data[currentType] = pets;
-  saveData(data);
+  await saveData(data);
   
   renderMedicineCareSection();
   renderCareCalendar();
@@ -3726,8 +3727,8 @@ function editMedicineFromDetail() {
 }
 
 // お薬詳細モーダルを開く
-function showMedicineDetailModal(medId) {
-  const data = loadData();
+async function showMedicineDetailModal(medId) {
+  const data = await loadData();
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
   if (!pet) return;
   
@@ -3789,8 +3790,8 @@ function showMedicineDetailModal(medId) {
 }
 
 // お薬マスタ一覧の描画（お薬タブ内）
-function renderMedicineListMaster() {
-  const data = loadData();
+async function renderMedicineListMaster() {
+  const data = await loadData();
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
   if (!pet) return;
 
@@ -3911,8 +3912,8 @@ function toggleMedicineMasterSort() {
 }
 
 // 服用履歴を手動追加
-function addMedicineHistory(medId) {
-  const data = loadData();
+async function addMedicineHistory(medId) {
+  const data = await loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
@@ -3931,14 +3932,14 @@ function addMedicineHistory(medId) {
   med.history.push({ startDate, endDate, dosage, status, updatedAt: new Date().toISOString() });
   pets[idx] = pet;
   data[currentType] = pets;
-  saveData(data);
+  await saveData(data);
   renderMedicineListMaster();
   showToast('服用履歴を追加しました ✓');
 }
 
 // 服用履歴を編集
-function editMedicineHistory(medId, hIdx) {
-  const data = loadData();
+async function editMedicineHistory(medId, hIdx) {
+  const data = await loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
@@ -3956,15 +3957,15 @@ function editMedicineHistory(medId, hIdx) {
   med.history[hIdx] = { startDate, endDate, dosage, status, updatedAt: new Date().toISOString() };
   pets[idx] = pet;
   data[currentType] = pets;
-  saveData(data);
+  await saveData(data);
   renderMedicineListMaster();
   showToast('服用履歴を更新しました ✓');
 }
 
 // 服用履歴を削除
-function deleteMedicineHistory(medId, hIdx) {
+async function deleteMedicineHistory(medId, hIdx) {
   if (!confirm('この服用履歴を削除しますか？')) return;
-  const data = loadData();
+  const data = await loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
@@ -3974,13 +3975,13 @@ function deleteMedicineHistory(medId, hIdx) {
   med.history.splice(hIdx, 1);
   pets[idx] = pet;
   data[currentType] = pets;
-  saveData(data);
+  await saveData(data);
   renderMedicineListMaster();
   showToast('服用履歴を削除しました');
 }
 
 // お薬マスタの新規登録・編集モーダルを開く
-function openMedicineModal(medId = null) {
+async function openMedicineModal(medId = null) {
   document.getElementById('edit-medicine-id').value = medId || '';
   document.getElementById('med-name').value = '';
   document.getElementById('med-usage').value = '';
@@ -3992,7 +3993,7 @@ function openMedicineModal(medId = null) {
   
   if (medId) {
     document.getElementById('medicine-modal-title').textContent = 'お薬情報を編集';
-    const data = loadData();
+    const data = await loadData();
     const pet = (data[currentType] || []).find(p => p.id === currentPetId);
     if (pet) {
       const med = pet.medicines.find(m => m.id === medId);
@@ -4013,14 +4014,14 @@ function openMedicineModal(medId = null) {
 }
 
 // お薬マスタの保存処理 (HTML側の saveMedicineRecord をフックする)
-function saveMedicineRecord() {
+async function saveMedicineRecord() {
   const name = document.getElementById('med-name').value.trim();
   if (!name) {
     alert('お薬名を入力してください');
     return;
   }
   
-  const data = loadData();
+  const data = await loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
@@ -4077,7 +4078,7 @@ function saveMedicineRecord() {
   
   pets[idx] = pet;
   data[currentType] = pets;
-  saveData(data);
+  await saveData(data);
   
   closeModal(null, 'modal-medicine');
   renderMedicineListMaster();
@@ -4086,10 +4087,10 @@ function saveMedicineRecord() {
 }
 
 // お薬マスタの削除
-function deleteMedicineMaster(medId) {
+async function deleteMedicineMaster(medId) {
   if (!confirm('このお薬を削除しますか？日常ケア画面の服用カウンターからも非表示になります。')) return;
   
-  const data = loadData();
+  const data = await loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
@@ -4099,7 +4100,7 @@ function deleteMedicineMaster(medId) {
   
   pets[idx] = pet;
   data[currentType] = pets;
-  saveData(data);
+  await saveData(data);
   
   renderMedicineListMaster();
   renderMedicineCareSection(); // 服用カウンター側も同期
@@ -4107,8 +4108,8 @@ function deleteMedicineMaster(medId) {
 }
 
 // お薬マスタの並び替え (▲▼ボタン)
-function moveMedicineOrder(medId, direction, isFromCare = false) {
-  const data = loadData();
+async function moveMedicineOrder(medId, direction, isFromCare = false) {
+  const data = await loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
@@ -4151,7 +4152,7 @@ function moveMedicineOrder(medId, direction, isFromCare = false) {
   
   pets[idx] = pet;
   data[currentType] = pets;
-  saveData(data);
+  await saveData(data);
   
   renderMedicineListMaster();
   renderMedicineCareSection(); // 服用カウンター側も同期
@@ -4197,7 +4198,7 @@ function startWalkTimer(petId) {
   renderWalkTimer();
 }
 
-function stopWalkTimer() {
+async function stopWalkTimer() {
   const state = loadWalkTimerState();
   if (!state) return;
   clearInterval(walkTimerInterval);
@@ -4208,7 +4209,7 @@ function stopWalkTimer() {
 
   // 散歩実績をquickCaresに記録
   if (currentPetId) {
-    const data = loadData();
+    const data = await loadData();
     const pets = data[currentType] || [];
     const idx = pets.findIndex(p => p.id === currentPetId);
     if (idx !== -1) {
@@ -4218,7 +4219,7 @@ function stopWalkTimer() {
       pet.quickCares[dateStr].walkMinutes = (pet.quickCares[dateStr].walkMinutes || 0) + mins;
       pets[idx] = pet;
       data[currentType] = pets;
-      saveData(data);
+      await saveData(data);
     }
   }
 
@@ -4268,7 +4269,7 @@ function renderWalkTimer() {
   if (!container) return;
   const state = loadWalkTimerState();
   const petId = currentPetId;
-  const data = loadData();
+  loadData().then(data => {
   const pet = petId ? (data[currentType]||[]).find(p=>p.id===petId) : null;
   const walkEnv = pet ? (pet.walkEnv || {}) : {};
 
@@ -4290,23 +4291,53 @@ function renderWalkTimer() {
     </div>
   `;
 
-  // 散歩記録サマリーを生成（過去7日分）
+  // 散歩記録：全記録 + 累計時間
   function buildWalkHistoryHtml() {
     if (!pet) return '';
     ensurePetHospitalFields(pet);
-    const today = new Date();
-    const rows = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      const mins = (pet.quickCares[dateStr] || {}).walkMinutes;
-      if (mins !== undefined && mins > 0) {
-        rows.push(`<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:3px 0;border-bottom:1px solid rgba(44,36,24,0.05);"><span>${formatDate(dateStr)}</span><span style="color:var(--accent)">🐾 ${mins}分</span></div>`);
+    // 全日付から散歩記録を収集
+    const allEntries = [];
+    Object.entries(pet.quickCares || {}).forEach(([dateStr, care]) => {
+      if (care.walkMinutes !== undefined && care.walkMinutes > 0) {
+        allEntries.push({ dateStr, mins: care.walkMinutes });
       }
-    }
-    if (rows.length === 0) return '<div style="font-size:12px;color:var(--text-light);padding:4px 0;">直近7日間の散歩記録はありません</div>';
-    return `<div style="margin-top:8px;background:rgba(44,36,24,0.03);border-radius:8px;padding:8px 10px;">${rows.join('')}</div>`;
+    });
+    allEntries.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+
+    const totalMins = allEntries.reduce((sum, e) => sum + e.mins, 0);
+    const totalH = Math.floor(totalMins / 60);
+    const totalM = totalMins % 60;
+    const totalStr = totalH > 0 ? `${totalH}時間${totalM}分` : `${totalM}分`;
+
+    if (allEntries.length === 0) return `
+      <div style="margin-top:8px;background:rgba(44,36,24,0.03);border-radius:8px;padding:8px 10px;">
+        <div style="font-size:12px;color:var(--text-light);padding:4px 0;">散歩記録はありません</div>
+      </div>`;
+
+    const rows = allEntries.map(({dateStr, mins}) => {
+      const d = new Date(dateStr + 'T00:00:00');
+      const label = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;padding:5px 0;border-bottom:1px solid rgba(44,36,24,0.05);">
+        <span>${label}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:var(--accent)">🐾 ${mins}分</span>
+          <button onclick="openWalkRecordEditModal('${dateStr}',${mins})" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;">✏️</button>
+          <button onclick="deleteWalkRecord('${dateStr}')" style="border:none;background:rgba(220,80,80,0.1);color:#c84040;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `
+      <div style="margin-top:8px;background:rgba(44,36,24,0.03);border-radius:8px;padding:8px 10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:11px;font-weight:700;color:var(--text-light);">累計散歩時間</span>
+          <span style="font-size:13px;font-weight:800;color:var(--accent);">🏆 ${totalStr}</span>
+        </div>
+        <div style="border-top:1px solid rgba(44,36,24,0.08);padding-top:6px;">
+          ${rows}
+        </div>
+        <button onclick="openWalkRecordAddModal()" style="margin-top:8px;width:100%;border:none;background:rgba(200,132,74,0.1);color:var(--accent);border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;">＋ 散歩記録を追加</button>
+      </div>`;
   }
 
   if (state && state.petId === petId) {
@@ -4328,6 +4359,7 @@ function renderWalkTimer() {
       <div id="walk-history-panel" style="display:none;">${histHtml}</div>
     `;
   }
+  }); // end loadData().then
 }
 
 function toggleWalkHistory() {
@@ -4336,8 +4368,67 @@ function toggleWalkHistory() {
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
-function saveWalkEnv() {
-  const data = loadData();
+// 散歩記録を後から追加するモーダル
+function openWalkRecordAddModal() {
+  const today = new Date().toISOString().split('T')[0];
+  const dateStr = prompt('記録する日付を入力してください（例: 2025-05-23）', today);
+  if (!dateStr) return;
+  const minsStr = prompt('散歩時間（分）を入力してください', '30');
+  if (!minsStr) return;
+  const mins = parseInt(minsStr, 10);
+  if (isNaN(mins) || mins <= 0) { alert('正しい分数を入力してください'); return; }
+  _saveWalkRecord(dateStr, mins);
+}
+
+// 散歩記録を編集するモーダル
+function openWalkRecordEditModal(dateStr, currentMins) {
+  const minsStr = prompt(`${formatDate(dateStr)} の散歩時間（分）を修正してください`, String(currentMins));
+  if (!minsStr) return;
+  const mins = parseInt(minsStr, 10);
+  if (isNaN(mins) || mins <= 0) { alert('正しい分数を入力してください'); return; }
+  _saveWalkRecord(dateStr, mins);
+}
+
+async function _saveWalkRecord(dateStr, mins) {
+  const data = await loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  const pet = ensurePetHospitalFields(pets[idx]);
+  if (!pet.quickCares[dateStr]) pet.quickCares[dateStr] = {};
+  pet.quickCares[dateStr].walkMinutes = mins;
+  pets[idx] = pet;
+  data[currentType] = pets;
+  await saveData(data);
+  renderWalkTimer();
+  // パネルを再表示
+  const panel = document.getElementById('walk-history-panel');
+  if (panel) panel.style.display = 'block';
+  showToast('散歩記録を保存しました ✓');
+}
+
+// 散歩記録を削除
+async function deleteWalkRecord(dateStr) {
+  if (!confirm(`${formatDate(dateStr)} の散歩記録を削除しますか？`)) return;
+  const data = await loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  const pet = ensurePetHospitalFields(pets[idx]);
+  if (pet.quickCares[dateStr]) {
+    delete pet.quickCares[dateStr].walkMinutes;
+  }
+  pets[idx] = pet;
+  data[currentType] = pets;
+  await saveData(data);
+  renderWalkTimer();
+  const panel = document.getElementById('walk-history-panel');
+  if (panel) panel.style.display = 'block';
+  showToast('散歩記録を削除しました');
+}
+
+async function saveWalkEnv() {
+  const data = await loadData();
   const pets = data[currentType] || [];
   const idx = pets.findIndex(p => p.id === currentPetId);
   if (idx === -1) return;
@@ -4358,7 +4449,7 @@ function saveWalkEnv() {
     walkTimes
   };
   data[currentType] = pets;
-  saveData(data);
+  await saveData(data);
   closeModal(null,'modal-walk-env');
   renderWalkTimer();
   showToast('散歩設定を保存しました ✓');
@@ -4388,7 +4479,7 @@ function confirmRemoveWalkTimeRow(rowId) {
 }
 
 function openWalkEnvModal() {
-  const data = loadData();
+  loadData().then(data => {
   const pet = (data[currentType]||[]).find(p=>p.id===currentPetId);
   const e = pet?.walkEnv || {};
   document.getElementById('we-max-temp').value = e.maxTemp||'';
@@ -4406,6 +4497,7 @@ function openWalkEnvModal() {
   }
 
   document.getElementById('modal-walk-env').classList.add('open');
+  });
 }
 
 // ========== 気になるメモ（次回通院用ストック） ==========
