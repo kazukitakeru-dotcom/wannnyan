@@ -1,5 +1,5 @@
 /* ========== Reset & Base ========== */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
 :root {
   --cream: #faf6f0; --warm: #f5ede0;
   --dog-primary: #c8844a; --dog-light: #f0d4b4; --dog-dark: #8b5a2b;
@@ -999,6 +999,11 @@ a, button {
   gap: 8px;
   margin-top: 6px;
 }
+.med-care-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .med-care-btn {
   background: var(--white);
   border: 1.5px solid rgba(44,36,24,0.08);
@@ -1011,15 +1016,13 @@ a, button {
   cursor: pointer;
   font-family: var(--font);
   transition: all 0.2s;
-  min-height: 72px;
+  min-height: 96px;
   position: relative;
   text-align: left;
-}
-.med-care-name-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   width: 100%;
+}
+.med-care-icon {
+  font-size: 20px;
 }
 .med-care-name {
   font-size: 13px;
@@ -1028,54 +1031,59 @@ a, button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%;
 }
-.med-care-usage {
-  font-size: 10px;
+.med-care-dosage {
+  font-size: 11px;
   color: var(--text-light);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.med-care-counter-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   width: 100%;
-  margin-top: 4px;
 }
-.med-care-status {
+.med-care-counter-val {
   font-size: 10px;
   font-weight: 700;
-  padding: 1px 6px;
+  padding: 2px 6px;
   border-radius: 20px;
   background: rgba(44,36,24,0.06);
   color: var(--text-light);
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: auto;
 }
-.med-care-btn.taken {
+.med-care-btn.completed {
   background: #eef9f2;
   border-color: #a3e0be;
 }
-.med-care-btn.taken .med-care-status {
+.med-care-btn.completed .med-care-counter-val {
   background: #4caf80;
   color: white;
 }
-.med-care-dec-btn {
-  width: 22px;
-  height: 22px;
+.med-care-actions {
+  display: flex;
+  gap: 6px;
+}
+.med-care-act-btn {
+  flex: 1;
   border: none;
-  background: rgba(224,80,80,0.1);
-  color: var(--red);
-  border-radius: 50%;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
+  padding: 6px 0;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 5;
+  font-family: var(--font);
 }
-.med-care-dec-btn:active {
-  transform: scale(0.9);
+.med-care-act-btn.plus {
+  background: rgba(76,175,128,0.1);
+  color: #4caf80;
+}
+.med-care-act-btn.minus {
+  background: rgba(224,80,80,0.1);
+  color: var(--red);
 }
 
 /* お薬マスター管理タブ */
@@ -1089,35 +1097,30 @@ a, button {
   background: var(--white);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 12px 14px;
-  border: 1px solid rgba(44,36,24,0.05);
+  padding: 14px;
+  border: 1.5px solid rgba(44,36,24,0.05);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.medicine-card-header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  border-bottom: 1px solid rgba(44,36,24,0.06);
+  padding-bottom: 8px;
 }
-.medicine-card-info {
-  flex: 1;
-  min-width: 0;
-  cursor: pointer;
-}
-.medicine-card-name {
-  font-size: 15px;
+.medicine-card-title {
+  font-size: 16px;
   font-weight: 800;
-  color: var(--text-dark);
-  margin-bottom: 2px;
 }
-.medicine-card-usage {
-  font-size: 12px;
-  color: var(--text-light);
-}
-.medicine-card-actions {
+.medicine-order-btns {
   display: flex;
-  align-items: center;
   gap: 4px;
 }
-.med-sort-btn {
-  width: 26px;
-  height: 26px;
+.med-order-btn {
+  width: 28px;
+  height: 28px;
   border: none;
   background: var(--warm);
   border-radius: 6px;
@@ -1128,18 +1131,57 @@ a, button {
   justify-content: center;
   color: var(--text-mid);
 }
-.med-del-btn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: rgba(224,80,80,0.08);
-  border-radius: 50%;
-  color: var(--red);
+.med-order-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.medicine-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.med-grid-item {
+  font-size: 13px;
+  color: var(--text-mid);
+}
+.med-grid-item strong {
+  color: var(--text-light);
+  font-weight: 600;
+}
+.med-notes-box {
+  background: var(--cream);
+  padding: 8px;
+  border-radius: 8px;
   font-size: 12px;
+  color: var(--text-mid);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.medicine-actions {
+  display: flex;
+  gap: 6px;
+  border-top: 1px dashed rgba(44,36,24,0.06);
+  padding-top: 8px;
+}
+.medicine-act-btn {
+  flex: 1;
+  border: none;
+  background: var(--warm);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 0;
+  border-radius: 8px;
   cursor: pointer;
+  color: var(--text-mid);
+  font-family: var(--font);
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
+}
+.medicine-act-btn.delete {
+  background: rgba(224,80,80,0.08);
+  color: var(--red);
 }
 
 /* 病院登録時の料金表エディター行 */
@@ -1148,11 +1190,35 @@ a, button {
   align-items: center;
   gap: 6px;
 }
-.price-row-name {
+.h-price-name {
   flex: 3;
+  border: 1.5px solid rgba(44,36,24,0.12);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 14px;
+  background: var(--cream);
+  font-family: var(--font);
+  outline: none;
 }
-.price-row-val {
+.h-price-val {
   flex: 2;
+  border: 1.5px solid rgba(44,36,24,0.12);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 14px;
+  background: var(--cream);
+  font-family: var(--font);
+  outline: none;
+}
+.h-price-del-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(224,80,80,0.1);
+  border-radius: 50%;
+  color: var(--red);
+  font-size: 14px;
+  cursor: pointer;
 }
 
 /* 病院詳細の料金表閲覧用テーブル */
@@ -1187,183 +1253,62 @@ a, button {
   font-weight: 700;
   color: var(--accent);
 }
-/* ========== 家族タグバー ========== */
-.family-tag-bar {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 8px 16px 4px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.family-tag-bar::-webkit-scrollbar { display: none; }
 
-.family-tag-chip {
-  flex-shrink: 0;
-  padding: 5px 14px;
-  background: var(--white);
-  border: 2px solid rgba(200,132,74,0.3);
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-mid);
-  cursor: pointer;
-  /* マスキングテープ風の少し傾いたデザイン */
-  box-shadow: 1px 1px 0 rgba(200,132,74,0.18), inset 0 0 0 1px rgba(255,255,255,0.6);
-  transition: all 0.15s;
-  letter-spacing: 0.03em;
-}
-.family-tag-chip.active {
-  background: var(--accent);
-  color: var(--white);
-  border-color: var(--accent);
-  box-shadow: 2px 2px 6px rgba(200,132,74,0.35);
-}
-
-/* ペットカード写真ラップ（続柄スタンプ用） */
-.pet-card-photo-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-.role-stamp {
-  position: absolute;
-  top: -4px;
-  right: -6px;
-  background: var(--accent);
-  color: var(--white);
-  font-size: 9px;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 20px;
-  box-shadow: 1px 1px 4px rgba(200,132,74,0.4);
-  transform: rotate(6deg);
-  white-space: nowrap;
-  border: 1px solid rgba(255,255,255,0.6);
-  letter-spacing: 0.02em;
-  z-index: 2;
-}
-.pet-card-family-tag {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--accent);
-  background: rgba(200,132,74,0.1);
-  border-radius: 10px;
-  padding: 2px 8px;
-  margin-top: 3px;
-  display: inline-block;
-}
-
-/* ========== 散歩タイマー ========== */
-.walk-timer-display {
-  text-align: center;
-  padding: 16px 0 8px;
-}
-.walk-timer-elapsed {
-  font-size: 44px;
-  font-weight: 800;
-  color: var(--accent);
-  letter-spacing: 0.05em;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-.walk-timer-remain {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-mid);
-  margin-top: 6px;
-}
-.walk-timer-remain.over {
-  color: #e05050;
-  animation: pulse 0.8s infinite;
-}
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-.walk-timer-start-btn {
-  background: var(--accent);
-  color: var(--white);
-  border: none;
-  border-radius: 12px;
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(200,132,74,0.35);
-  flex-shrink: 0;
-}
-.walk-timer-stop-btn {
-  display: block;
-  width: 100%;
-  background: rgba(220,80,80,0.1);
-  color: #c84040;
-  border: 2px solid rgba(220,80,80,0.25);
-  border-radius: 12px;
-  padding: 12px;
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-  margin-top: 10px;
-}
-.walk-env-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--cream);
-  border-radius: 10px;
-  padding: 10px;
-  margin-bottom: 4px;
-}
-.walk-env-item {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-mid);
-}
-.walk-env-label { color: var(--text-light); }
-
-/* ========== 気になるメモ ========== */
-.pending-note-item {
+/* ==========================================================================
+   ===== 複数医師管理 & 服用履歴編集用 新規追加クラス =====
+   ========================================================================== */
+.doctor-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: var(--cream);
-  border-radius: 10px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  border-left: 3px solid var(--accent);
-  gap: 8px;
+  gap: 6px;
 }
-.pending-note-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-dark);
+.doctor-input {
   flex: 1;
-  line-height: 1.4;
+  border: 1.5px solid rgba(44,36,24,0.12);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 14px;
+  background: var(--cream);
+  font-family: var(--font);
+  outline: none;
 }
-.pending-note-del {
-  background: none;
+.doctor-order-btn {
+  width: 26px;
+  height: 26px;
   border: none;
-  font-size: 16px;
-  cursor: pointer;
-  flex-shrink: 0;
-  padding: 2px;
-  opacity: 0.6;
-}
-.pending-note-del:hover { opacity: 1; }
-
-.pending-note-chip {
-  display: inline-block;
-  background: var(--white);
-  border: 1.5px solid rgba(200,132,74,0.35);
-  border-radius: 20px;
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 700;
+  background: var(--warm);
+  border-radius: 6px;
+  font-size: 11px;
   color: var(--text-mid);
   cursor: pointer;
-  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.pending-note-chip.selected {
-  background: var(--accent);
-  color: var(--white);
-  border-color: var(--accent);
+.doctor-order-btn:disabled {
+  opacity: 0.3;
+}
+.history-edit-item {
+  background: var(--cream);
+  border: 1px solid rgba(44,36,24,0.08);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history-edit-fields-row {
+  display: flex;
+  gap: 6px;
+}
+.history-edit-fields-row > * {
+  flex: 1;
+  min-width: 0;
+}
+.med-history-timeline-section {
+  max-height: 220px;
+  overflow-y: auto;
+}
+* {
+  touch-action: manipulation;
 }

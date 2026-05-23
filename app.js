@@ -181,8 +181,9 @@ async function selectType(type) {
   await renderList();
 }
 
-function goBack() { currentType=null; showScreen('screen-select','back'); }
+function goBack() { clearInterval(walkTimerInterval); walkTimerInterval = null; currentType=null; showScreen('screen-select','back'); }
 async function goToList() {
+  clearInterval(walkTimerInterval); walkTimerInterval = null;
   editMode=false; currentPetId=null; tempPhotoData=null;
   showScreen('screen-list','back'); await renderList();
 }
@@ -648,6 +649,16 @@ function openBreedModal(){
   if(searchInputEl) {
     searchInputEl.value = '';
     searchInputEl.placeholder = placeholder;
+    // iOSでモーダルを開いた瞬間にキーボードが出て画面がズレるのを防ぐ
+    // readonlyにしておき、タップ時だけ解除する
+    searchInputEl.setAttribute('readonly', 'readonly');
+    const removeReadonly = () => {
+      searchInputEl.removeAttribute('readonly');
+      searchInputEl.removeEventListener('touchend', removeReadonly);
+      searchInputEl.removeEventListener('click', removeReadonly);
+    };
+    searchInputEl.addEventListener('touchend', removeReadonly, { once: true });
+    searchInputEl.addEventListener('click', removeReadonly, { once: true });
   }
   
   breedSortCurrent='group';
@@ -655,6 +666,7 @@ function openBreedModal(){
   document.getElementById('bsort-alpha').classList.remove('active');
   renderBreedList();
   document.getElementById('modal-breed').classList.add('open');
+  _attachModalViewportFix('modal-breed');
 }
 function renderBreedList(){
   const query=toHiragana((document.getElementById('breed-search-input').value||'').trim()).toLowerCase();
@@ -993,8 +1005,9 @@ function openAddModal(){
   document.getElementById('new-photo-placeholder').classList.remove('hidden');
   tempPhotoData=null;
   document.getElementById('modal-add').classList.add('open');
+  _attachModalViewportFix('modal-add');
 }
-function closeAddModal(){ document.getElementById('modal-add').classList.remove('open'); tempPhotoData=null; }
+function closeAddModal(){ document.getElementById('modal-add').classList.remove('open'); _detachModalViewportFix(); tempPhotoData=null; }
 function previewNewPhoto(event){
   const file=event.target.files[0]; if(!file)return;
   compressAndLoad(file, data=>{
@@ -1034,7 +1047,7 @@ async function confirmDelete(){
 }
 
 // ========== データ引き継ぎ ==========
-function openTransferModal(){ document.getElementById('modal-transfer').classList.add('open'); }
+function openTransferModal(){ document.getElementById('modal-transfer').classList.add('open'); _attachModalViewportFix('modal-transfer'); }
 async function exportData(){
   const petData = await loadData();
   const hospitals = await loadHospitals();
@@ -1936,6 +1949,7 @@ async function openHospitalModal(hospitalId = null) {
   }
 
   document.getElementById('modal-hospital').classList.add('open');
+  _attachModalViewportFix('modal-hospital');
 }
 
 // 担当医エディタに1行追加（名前＋特徴メモ）
@@ -2341,6 +2355,7 @@ async function openBulkMedicalModal() {
 
   renderBulkPetsList(allPets);
   document.getElementById('modal-bulk-medical').classList.add('open');
+  _attachModalViewportFix('modal-bulk-medical');
 }
 
 async function renderBulkPetsList(allPets) {
@@ -2914,6 +2929,7 @@ async function openMedicalRecordModal(recordId = null) {
     renderMedicalDoctorSelect(document.getElementById('m-hospital-select').value, '');
   }
   document.getElementById('modal-medical-record').classList.add('open');
+  _attachModalViewportFix('modal-medical-record');
   // 未消化の気になるメモを表示
   renderUndigestedNotesForModal(currentPetId);
 }
@@ -3396,6 +3412,7 @@ async function openCertificateModal(certKey) {
   }
   
   document.getElementById('modal-certificate').classList.add('open');
+  _attachModalViewportFix('modal-certificate');
 }
 
 // セレクトボックス変更時のハンドラ
@@ -4011,6 +4028,7 @@ async function openMedicineModal(medId = null) {
   }
   
   document.getElementById('modal-medicine').classList.add('open');
+  _attachModalViewportFix('modal-medicine');
 }
 
 // お薬マスタの保存処理 (HTML側の saveMedicineRecord をフックする)
@@ -4160,9 +4178,63 @@ async function moveMedicineOrder(medId, direction, isFromCare = false) {
 
 
 // ========== Modal 共通 ==========
+
+// iOS Safari で input にフォーカスが当たるとキーボードが表示され、
+// position:fixed のモーダルが viewport 外にズレる問題を visualViewport で補正する
+let _vvHandler = null;
+let _vvModalId = null;
+
+function _attachModalViewportFix(modalId) {
+  _detachModalViewportFix();
+  _vvModalId = modalId;
+  if (!window.visualViewport) return;
+  _vvHandler = () => {
+    const modal = document.getElementById(_vvModalId);
+    if (!modal) return;
+    const box = modal.querySelector('.modal-box');
+    if (!box) return;
+    const vv = window.visualViewport;
+    // キーボードが出ているときは viewport が縮む。その分だけモーダルを上にずらす
+    const offsetY = window.innerHeight - vv.height - vv.offsetTop;
+    if (offsetY > 0) {
+      // キーボードが出ている：modal-box を viewport 内に収める
+      modal.style.alignItems = 'flex-start';
+      modal.style.paddingTop = `max(env(safe-area-inset-top, 0px), ${Math.max(0, vv.offsetTop)}px)`;
+      box.style.maxHeight = `${vv.height - 20}px`;
+    } else {
+      // キーボードが閉じた：元に戻す
+      modal.style.alignItems = '';
+      modal.style.paddingTop = '';
+      box.style.maxHeight = '';
+    }
+  };
+  window.visualViewport.addEventListener('resize', _vvHandler);
+  window.visualViewport.addEventListener('scroll', _vvHandler);
+}
+
+function _detachModalViewportFix() {
+  if (_vvHandler && window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', _vvHandler);
+    window.visualViewport.removeEventListener('scroll', _vvHandler);
+  }
+  // 補正スタイルをリセット
+  if (_vvModalId) {
+    const modal = document.getElementById(_vvModalId);
+    if (modal) {
+      modal.style.alignItems = '';
+      modal.style.paddingTop = '';
+      const box = modal.querySelector('.modal-box');
+      if (box) box.style.maxHeight = '';
+    }
+  }
+  _vvHandler = null;
+  _vvModalId = null;
+}
+
 function closeModal(event, id){
   if(!event||event.target===event.currentTarget){
     document.getElementById(id).classList.remove('open');
+    _detachModalViewportFix();
   }
 }
 
@@ -4497,6 +4569,7 @@ function openWalkEnvModal() {
   }
 
   document.getElementById('modal-walk-env').classList.add('open');
+  _attachModalViewportFix('modal-walk-env');
   });
 }
 
