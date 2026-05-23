@@ -477,6 +477,12 @@ function selectGender(btn, val) {
   document.getElementById('edit-gender').value = val;
 }
 
+function selectNewGender(btn, val) {
+  document.querySelectorAll('#modal-add .gender-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('new-gender').value = val;
+}
+
 function toggleFolder(key, event) {
   document.getElementById(`folder-${key}`).classList.toggle('open');
 }
@@ -638,7 +644,14 @@ function setBreedSort(mode){
   document.getElementById('bsort-alpha').classList.toggle('active',mode==='alpha');
   renderBreedList();
 }
+// 新規追加モーダル用の犬種選択（選択後に new-breed へ反映）
+let _breedTargetMode = 'edit'; // 'edit' or 'new'
+function openNewBreedModal(){
+  _breedTargetMode = 'new';
+  openBreedModal();
+}
 function openBreedModal(){
+  _breedTargetMode = _breedTargetMode || 'edit';
   const breedLabel = currentType==='dog'?'犬種':'猫種';
   const title = `${breedLabel}を選択`;
   const placeholder = `${breedLabel}を検索…`;
@@ -695,17 +708,27 @@ function renderBreedList(){
   }
 }
 function selectBreed(name){
-  const hiddenEl=document.getElementById('edit-breed');
-  if(hiddenEl) hiddenEl.value=name;
-  const btnLabel=document.getElementById('breed-btn-label');
-  if(btnLabel){ btnLabel.textContent=name; btnLabel.classList.remove('placeholder'); }
-  const mixedWrap=document.getElementById('mixed-parents-wrap');
-  if(mixedWrap) mixedWrap.style.display=name==='雑種'?'flex':'none';
-  const breedLabel = currentType==='dog'?'犬種':'猫種';
-  const p1 = document.getElementById('edit-parent1');
-  const p2 = document.getElementById('edit-parent2');
-  if(p1) p1.placeholder = `親1の${breedLabel}`;
-  if(p2) p2.placeholder = `親2の${breedLabel}`;
+  if(_breedTargetMode === 'new'){
+    // 新規追加モーダル向け
+    const hiddenEl=document.getElementById('new-breed');
+    if(hiddenEl) hiddenEl.value=name;
+    const btnLabel=document.getElementById('new-breed-btn-label');
+    if(btnLabel){ btnLabel.textContent=name; btnLabel.classList.remove('placeholder'); }
+  } else {
+    // 編集モーダル向け
+    const hiddenEl=document.getElementById('edit-breed');
+    if(hiddenEl) hiddenEl.value=name;
+    const btnLabel=document.getElementById('breed-btn-label');
+    if(btnLabel){ btnLabel.textContent=name; btnLabel.classList.remove('placeholder'); }
+    const mixedWrap=document.getElementById('mixed-parents-wrap');
+    if(mixedWrap) mixedWrap.style.display=name==='雑種'?'flex':'none';
+    const breedLabel = currentType==='dog'?'犬種':'猫種';
+    const p1 = document.getElementById('edit-parent1');
+    const p2 = document.getElementById('edit-parent2');
+    if(p1) p1.placeholder = `親1の${breedLabel}`;
+    if(p2) p2.placeholder = `親2の${breedLabel}`;
+  }
+  _breedTargetMode = 'edit'; // リセット
   closeModal(null,'modal-breed');
 }
 
@@ -1003,6 +1026,13 @@ async function saveSurvey(){
 function openAddModal(){
   ['new-name','new-age'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('new-birthday').value='';
+  document.getElementById('new-gender').value='';
+  document.getElementById('new-breed').value='';
+  // 性別ボタン初期化
+  document.querySelectorAll('#modal-add .gender-btn').forEach(b=>b.classList.remove('selected'));
+  // 犬種ボタン初期化
+  const newBreedLabel = document.getElementById('new-breed-btn-label');
+  if(newBreedLabel){ newBreedLabel.textContent='タップして選択'; newBreedLabel.classList.add('placeholder'); }
   document.getElementById('new-photo-preview').src='';
   document.getElementById('new-photo-preview').classList.add('hidden');
   document.getElementById('new-photo-placeholder').classList.remove('hidden');
@@ -1043,7 +1073,9 @@ async function addPet(){
     name, birthday:document.getElementById('new-birthday').value,
     age:(document.getElementById('new-age').value||'').trim(),
     photo:tempPhotoData||null, memo:'', issues:{}, survey:{},
-    gender:'', breed:'', weight:'', parent1:'', parent2:'',
+    gender:(document.getElementById('new-gender').value||''),
+    breed:(document.getElementById('new-breed').value||''),
+    weight:'', parent1:'', parent2:'',
     createdAt:Date.now(), updatedAt:Date.now(),
   };
   const data=await loadData();
@@ -2295,6 +2327,17 @@ function toggleYearGroup(year) {
 // ========== まとめて通院記録 ==========
 let bulkTargetIds = new Set(); // 記録対象ペットIDセット
 
+// まとめ記録の除外メンバーを localStorage に永続保存する
+const BULK_EXCLUDED_KEY = 'wannyan_bulk_excluded';
+function loadBulkExcluded() {
+  try { return new Set(JSON.parse(localStorage.getItem(BULK_EXCLUDED_KEY) || '[]')); }
+  catch(e) { return new Set(); }
+}
+function saveBulkExcluded(excludedSet) {
+  try { localStorage.setItem(BULK_EXCLUDED_KEY, JSON.stringify([...excludedSet])); }
+  catch(e) {}
+}
+
 // ──── 共通フィールドの同期ヘルパー ────
 // 指定フィールドの値を全ペット行に同期する
 async function syncBulkField(field) {
@@ -2366,10 +2409,14 @@ async function openBulkMedicalModal() {
   if (tc) tc.checked = false;
   if (fc) fc.checked = false;
 
-  // 初期対象: 家族タグがある子のみ（なければ全員）
+  // 初期対象: 家族タグがある子のみ（なければ全員）、そこから保存済み除外リストを引く
   const hasFamilyTag = allPets.filter(p => p.familyTag);
   const initialTargets = hasFamilyTag.length > 0 ? hasFamilyTag : allPets;
-  bulkTargetIds = new Set(initialTargets.map(p => `${p.petType}-${p.id}`));
+  const savedExcluded = loadBulkExcluded();
+  // 除外リストのうち現在も存在するペットのみ有効とする
+  const validIds = new Set(allPets.map(p => `${p.petType}-${p.id}`));
+  const activeExcluded = new Set([...savedExcluded].filter(id => validIds.has(id)));
+  bulkTargetIds = new Set(initialTargets.map(p => `${p.petType}-${p.id}`).filter(id => !activeExcluded.has(id)));
 
   renderBulkPetsList(allPets);
   document.getElementById('modal-bulk-medical').classList.add('open');
@@ -2577,7 +2624,12 @@ function openBulkAddPanel() {
 }
 
 async function addBulkTarget(petType, petId) {
-  bulkTargetIds.add(`${petType}-${petId}`);
+  const key = `${petType}-${petId}`;
+  bulkTargetIds.add(key);
+  // 除外リストから外す（次回以降も対象に戻す）
+  const excluded = loadBulkExcluded();
+  excluded.delete(key);
+  saveBulkExcluded(excluded);
   const data = await loadData();
   const allPets = [
     ...(data.dog || []).map(p => ({...p, petType:'dog'})),
@@ -2587,8 +2639,14 @@ async function addBulkTarget(petType, petId) {
 }
 
 async function removeBulkTarget(id) {
-  if (!confirm('この子を今回のまとめ記録対象から外しますか？')) return;
+  if (!confirm('この子を今回のまとめ記録対象から外しますか？\n\n次回以降も除外したままにしますか？')) {
+    return;
+  }
   bulkTargetIds.delete(id);
+  // 除外リストに追加して永続保存
+  const excluded = loadBulkExcluded();
+  excluded.add(id);
+  saveBulkExcluded(excluded);
   const data = await loadData();
   const allPets = [
     ...(data.dog || []).map(p => ({...p, petType:'dog'})),
@@ -4201,22 +4259,9 @@ async function moveMedicineOrder(medId, direction, isFromCare = false) {
 // ============================================================
 // iOS Safari キーボード起因のモーダルズレ 完全対策
 // ============================================================
-//
-// 問題の構造:
-//   iOS Safari は input にフォーカスが当たるとソフトキーボードを表示し、
-//   visualViewport を縮小する。このとき:
-//   1) position:fixed の要素は「画面上部基準」のまま動かず、
-//      キーボード分だけ下に押し出されて見切れる
-//   2) #app (overflow:hidden) や detail-content が
-//      iOS の自動スクロール機能によって勝手にスクロールされる
-//   3) モーダルを閉じた後もそのスクロールズレが残る
-//
-// 解決方針:
-//   A) モーダル overlay を fixed→absolute に切り替え、
-//      top を visualViewport.offsetTop に追従させることで
-//      キーボード出現時も常に画面内に表示する
-//   B) input フォーカス時に背面スクロールを完全に抑制する
-//   C) モーダルを閉じた後、#app / 全スクロール可能領域を強制リセットする
+// position:fixed のまま維持し、visualViewport.offsetTop 分だけ
+// CSS custom property 経由で translateY 補正する方式。
+// absolute 方式だとモーダル内ボタンの pointer-events がズレるため採用しない。
 // ============================================================
 
 let _vvHandler = null;
@@ -4240,40 +4285,31 @@ function _attachModalViewportFix(modalId) {
     const modal = document.getElementById(_vvModalId);
     if (!modal || !modal.classList.contains('open')) return;
     const vv = window.visualViewport;
-    const box = modal.querySelector('.modal-box');
 
-    // visualViewport の offsetTop = ページが上にスクロールされた量
-    // これを overlay の top に使うことで fixed の代わりに追従させる
-    modal.style.position = 'absolute';
-    modal.style.top = vv.offsetTop + 'px';
+    // キーボード出現時: visualViewport が縮んだ分 overlay を上にずらす
+    // position:fixed はそのまま維持するので pointer-events は正常
+    const offsetY = vv.offsetTop;
+    modal.style.transform = offsetY > 0 ? `translateY(${offsetY}px)` : '';
     modal.style.height = vv.height + 'px';
-    modal.style.width = vv.width + 'px';
-    modal.style.left = vv.offsetLeft + 'px';
 
+    const box = modal.querySelector('.modal-box');
     if (box) {
-      // キーボード分を差し引いた高さに制限
-      const maxH = Math.floor(vv.height * 0.88);
-      box.style.maxHeight = maxH + 'px';
+      box.style.maxHeight = Math.floor(vv.height * 0.88) + 'px';
     }
 
-    // 背面のスクロールを強制的に元の位置に戻す（iOS の自動スクロール対策）
     _suppressBackgroundScroll();
   };
 
   _vvHandler = applyFix;
   window.visualViewport.addEventListener('resize', _vvHandler);
   window.visualViewport.addEventListener('scroll', _vvHandler);
-
-  // 初回適用
   applyFix();
 }
 
 function _suppressBackgroundScroll() {
-  // #app とすべてのスクロール可能領域のズレを抑制
   const app = document.getElementById('app');
-  if (app) { app.scrollTop = 0; }
+  if (app) app.scrollTop = 0;
   window.scrollTo(0, 0);
-
   const activeScreen = document.querySelector('.screen.active');
   if (!activeScreen) return;
   const scrollable = activeScreen.querySelector('.detail-content, .pet-list, .folder-content');
@@ -4285,21 +4321,15 @@ function _detachModalViewportFix() {
     window.visualViewport.removeEventListener('resize', _vvHandler);
     window.visualViewport.removeEventListener('scroll', _vvHandler);
   }
-
   if (_vvModalId) {
     const modal = document.getElementById(_vvModalId);
     if (modal) {
-      // position を fixed に戻す
-      modal.style.position = '';
-      modal.style.top = '';
+      modal.style.transform = '';
       modal.style.height = '';
-      modal.style.width = '';
-      modal.style.left = '';
       const box = modal.querySelector('.modal-box');
       if (box) box.style.maxHeight = '';
     }
   }
-
   _vvHandler = null;
   _vvModalId = null;
 }

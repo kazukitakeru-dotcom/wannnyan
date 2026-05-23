@@ -110,7 +110,20 @@
       <div class="modal-body">
         <label class="field-label">名前 <span class="required">*</span></label>
         <input type="text" id="new-name" class="field-input" placeholder="名前を入力">
-        <label class="field-label">生年月日</label>
+        <label class="field-label">性別</label>
+        <div class="gender-select">
+          <button class="gender-btn" id="new-gender-btn-オス" onclick="selectNewGender(this,'オス')">♂ オス</button>
+          <button class="gender-btn" id="new-gender-btn-メス" onclick="selectNewGender(this,'メス')">♀ メス</button>
+          <button class="gender-btn" id="new-gender-btn-不明" onclick="selectNewGender(this,'不明')">❓ 不明</button>
+        </div>
+        <input type="hidden" id="new-gender" value="">
+        <label class="field-label" style="margin-top:4px;">犬種・猫種</label>
+        <button class="breed-display-btn" onclick="openNewBreedModal()" id="new-breed-btn">
+          <span id="new-breed-btn-label" class="placeholder">タップして選択</span>
+          <span>›</span>
+        </button>
+        <input type="hidden" id="new-breed" value="">
+        <label class="field-label" style="margin-top:4px;">生年月日</label>
         <input type="date" id="new-birthday" class="field-input">
         <label class="field-label">年齢（生年月日未入力時）</label>
         <input type="text" id="new-age" class="field-input" placeholder="例: 3歳2ヶ月">
