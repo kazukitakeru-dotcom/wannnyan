@@ -171,6 +171,15 @@ function applyTypeClass(type) {
   });
 }
 
+// iOS Safari の2本指スワイプ（ブラウザ戻るジェスチャー）対策
+// screen-hospital-records 表示中はブラウザのスワイプナビゲーションを抑制する
+document.addEventListener('touchstart', function(e) {
+  const hospital = document.getElementById('screen-hospital-records');
+  if (hospital && hospital.classList.contains('active') && e.touches.length >= 2) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
 async function selectType(type) {
   currentType = type;
   currentFamilyTagFilter = null;
@@ -1359,7 +1368,36 @@ async function goToDetail() {
   if (pet) {
     await renderDetailContent(pet, false);
   }
-  showScreen('screen-detail', 'back');
+
+  // iOS 2本指スワイプ等でスクリーン状態が壊れていても確実に戻れるよう
+  // screen-detail を強制的に active にして screen-hospital-records を非表示にする
+  const all = document.querySelectorAll('.screen');
+  all.forEach(s => {
+    s.classList.remove('active', 'slide-out');
+    s.style.transform = '';
+    s.style.transition = '';
+  });
+  // screen-detail だけ active にしてスライドイン
+  const detailScreen = document.getElementById('screen-detail');
+  const hospitalScreen = document.getElementById('screen-hospital-records');
+  detailScreen.style.transform = 'translateX(-30%)';
+  detailScreen.classList.add('active');
+  if (hospitalScreen) {
+    hospitalScreen.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
+    hospitalScreen.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      hospitalScreen.style.transform = '';
+      hospitalScreen.style.transition = '';
+    }, 350);
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    detailScreen.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
+    detailScreen.style.transform = 'translateX(0)';
+    setTimeout(() => {
+      detailScreen.style.transition = '';
+      detailScreen.style.transform = '';
+    }, 350);
+  }));
 }
 
 // 統合画面内のサブタブを切り替える
