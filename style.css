@@ -1,6 +1,6 @@
 /* ========== Reset & Base ========== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
-input[type="date"].field-input { appearance: none; -webkit-appearance: none; min-width: 0; width: 100%; }
+input[type="date"].field-input { appearance: none; -webkit-appearance: none; min-width: 0; width: 100%; min-height: 42px; }
 :root {
   --cream: #faf6f0; --warm: #f5ede0;
   --dog-primary: #c8844a; --dog-light: #f0d4b4; --dog-dark: #8b5a2b;
@@ -12,8 +12,8 @@ input[type="date"].field-input { appearance: none; -webkit-appearance: none; min
   --font: 'Hiragino Kaku Gothic ProN','Hiragino Sans','Noto Sans JP',sans-serif;
 }
 .cat-type { --accent: var(--cat-primary); }
-html, body { height: 100%; font-family: var(--font); background: var(--cream); color: var(--text-dark); overflow: hidden; -webkit-tap-highlight-color: transparent; }
-#app { height: 100vh; height: -webkit-fill-available; position: relative; overflow: hidden; }
+html, body { height: 100%; font-family: var(--font); background: var(--cream); color: var(--text-dark); overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+#app { height: 100vh; height: -webkit-fill-available; position: relative; overflow: hidden; overscroll-behavior: none; }
 
 /* ===== Screens ===== */
 .screen { position: absolute; inset: 0; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.35s cubic-bezier(0.4,0,0.2,1); background: var(--cream); overflow: hidden; }
@@ -185,7 +185,7 @@ textarea.field-input { resize: vertical; min-height: 76px; line-height: 1.6; }
 .hidden { display: none !important; }
 
 /* ===== Modal ===== */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: flex-end; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: flex-end; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.25s; overflow: hidden; }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
 .modal-box { background: var(--white); border-radius: 24px 24px 0 0; width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); transform: translateY(30px); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); -webkit-overflow-scrolling: touch; }
 .modal-overlay.open .modal-box { transform: translateY(0); }

@@ -653,12 +653,15 @@ function openBreedModal(){
     // readonlyにしておき、タップ時だけ解除する
     searchInputEl.setAttribute('readonly', 'readonly');
     const removeReadonly = () => {
+      // readonly解除と同時に背面スクロールをリセット
       searchInputEl.removeAttribute('readonly');
-      searchInputEl.removeEventListener('touchend', removeReadonly);
-      searchInputEl.removeEventListener('click', removeReadonly);
+      _suppressBackgroundScroll();
     };
     searchInputEl.addEventListener('touchend', removeReadonly, { once: true });
     searchInputEl.addEventListener('click', removeReadonly, { once: true });
+    // フォーカスが当たるたびに背面スクロールを抑制
+    searchInputEl.addEventListener('focus', _suppressBackgroundScroll);
+    searchInputEl.addEventListener('blur', _suppressBackgroundScroll);
   }
   
   breedSortCurrent='group';
@@ -1007,7 +1010,22 @@ function openAddModal(){
   document.getElementById('modal-add').classList.add('open');
   _attachModalViewportFix('modal-add');
 }
-function closeAddModal(){ document.getElementById('modal-add').classList.remove('open'); _detachModalViewportFix(); tempPhotoData=null; }
+function closeAddModal(){
+  document.getElementById('modal-add').classList.remove('open');
+  _detachModalViewportFix();
+  tempPhotoData=null;
+  // モーダルを閉じた後のズレをリセット
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    window.scrollTo(0, 0);
+    const app = document.getElementById('app');
+    if (app) app.scrollTop = 0;
+    const activeScreen = document.querySelector('.screen.active');
+    if (activeScreen) {
+      const scrollable = activeScreen.querySelector('.detail-content, .pet-list, .folder-content');
+      if (scrollable) { scrollable.scrollTop = _savedScrollTop; }
+    }
+  }));
+}
 function previewNewPhoto(event){
   const file=event.target.files[0]; if(!file)return;
   compressAndLoad(file, data=>{
@@ -4180,36 +4198,86 @@ async function moveMedicineOrder(medId, direction, isFromCare = false) {
 // ========== Modal 共通 ==========
 
 // iOS Safari で input にフォーカスが当たるとキーボードが表示され、
-// position:fixed のモーダルが viewport 外にズレる問題を visualViewport で補正する
+// ============================================================
+// iOS Safari キーボード起因のモーダルズレ 完全対策
+// ============================================================
+//
+// 問題の構造:
+//   iOS Safari は input にフォーカスが当たるとソフトキーボードを表示し、
+//   visualViewport を縮小する。このとき:
+//   1) position:fixed の要素は「画面上部基準」のまま動かず、
+//      キーボード分だけ下に押し出されて見切れる
+//   2) #app (overflow:hidden) や detail-content が
+//      iOS の自動スクロール機能によって勝手にスクロールされる
+//   3) モーダルを閉じた後もそのスクロールズレが残る
+//
+// 解決方針:
+//   A) モーダル overlay を fixed→absolute に切り替え、
+//      top を visualViewport.offsetTop に追従させることで
+//      キーボード出現時も常に画面内に表示する
+//   B) input フォーカス時に背面スクロールを完全に抑制する
+//   C) モーダルを閉じた後、#app / 全スクロール可能領域を強制リセットする
+// ============================================================
+
 let _vvHandler = null;
 let _vvModalId = null;
+let _savedScrollTop = 0;
 
 function _attachModalViewportFix(modalId) {
   _detachModalViewportFix();
   _vvModalId = modalId;
+
+  // モーダルを開く前のスクロール位置を記録
+  const activeScreen = document.querySelector('.screen.active');
+  if (activeScreen) {
+    const scrollable = activeScreen.querySelector('.detail-content, .pet-list, .folder-content');
+    _savedScrollTop = scrollable ? scrollable.scrollTop : 0;
+  }
+
   if (!window.visualViewport) return;
-  _vvHandler = () => {
+
+  const applyFix = () => {
     const modal = document.getElementById(_vvModalId);
-    if (!modal) return;
-    const box = modal.querySelector('.modal-box');
-    if (!box) return;
+    if (!modal || !modal.classList.contains('open')) return;
     const vv = window.visualViewport;
-    // キーボードが出ているときは viewport が縮む。その分だけモーダルを上にずらす
-    const offsetY = window.innerHeight - vv.height - vv.offsetTop;
-    if (offsetY > 0) {
-      // キーボードが出ている：modal-box を viewport 内に収める
-      modal.style.alignItems = 'flex-start';
-      modal.style.paddingTop = `max(env(safe-area-inset-top, 0px), ${Math.max(0, vv.offsetTop)}px)`;
-      box.style.maxHeight = `${vv.height - 20}px`;
-    } else {
-      // キーボードが閉じた：元に戻す
-      modal.style.alignItems = '';
-      modal.style.paddingTop = '';
-      box.style.maxHeight = '';
+    const box = modal.querySelector('.modal-box');
+
+    // visualViewport の offsetTop = ページが上にスクロールされた量
+    // これを overlay の top に使うことで fixed の代わりに追従させる
+    modal.style.position = 'absolute';
+    modal.style.top = vv.offsetTop + 'px';
+    modal.style.height = vv.height + 'px';
+    modal.style.width = vv.width + 'px';
+    modal.style.left = vv.offsetLeft + 'px';
+
+    if (box) {
+      // キーボード分を差し引いた高さに制限
+      const maxH = Math.floor(vv.height * 0.88);
+      box.style.maxHeight = maxH + 'px';
     }
+
+    // 背面のスクロールを強制的に元の位置に戻す（iOS の自動スクロール対策）
+    _suppressBackgroundScroll();
   };
+
+  _vvHandler = applyFix;
   window.visualViewport.addEventListener('resize', _vvHandler);
   window.visualViewport.addEventListener('scroll', _vvHandler);
+
+  // 初回適用
+  applyFix();
+}
+
+function _suppressBackgroundScroll() {
+  // #app とすべてのスクロール可能領域のズレを抑制
+  const app = document.getElementById('app');
+  if (app) { app.scrollTop = 0; }
+  window.scrollTo(0, 0);
+
+  const activeScreen = document.querySelector('.screen.active');
+  if (!activeScreen) return;
+  const scrollable = activeScreen.querySelector('.detail-content, .pet-list, .folder-content');
+  if (scrollable) scrollable.scrollTop = _savedScrollTop;
 }
 
 function _detachModalViewportFix() {
@@ -4217,16 +4285,21 @@ function _detachModalViewportFix() {
     window.visualViewport.removeEventListener('resize', _vvHandler);
     window.visualViewport.removeEventListener('scroll', _vvHandler);
   }
-  // 補正スタイルをリセット
+
   if (_vvModalId) {
     const modal = document.getElementById(_vvModalId);
     if (modal) {
-      modal.style.alignItems = '';
-      modal.style.paddingTop = '';
+      // position を fixed に戻す
+      modal.style.position = '';
+      modal.style.top = '';
+      modal.style.height = '';
+      modal.style.width = '';
+      modal.style.left = '';
       const box = modal.querySelector('.modal-box');
       if (box) box.style.maxHeight = '';
     }
   }
+
   _vvHandler = null;
   _vvModalId = null;
 }
@@ -4235,19 +4308,31 @@ function closeModal(event, id){
   if(!event||event.target===event.currentTarget){
     document.getElementById(id).classList.remove('open');
     _detachModalViewportFix();
-    // iOS Safari でモーダル内 input にフォーカスが当たった際に
-    // 背面の detail-content がスクロールされてしまう問題を補正する
-    // モーダルを閉じた後、activeな画面のスクロール可能領域を現在位置に固定し直す
-    requestAnimationFrame(() => {
+
+    // モーダルを閉じた後、iOS が勝手にスクロールさせたズレを完全リセット
+    const doReset = () => {
+      // window/body レベルのズレ
+      window.scrollTo(0, 0);
+      const app = document.getElementById('app');
+      if (app) app.scrollTop = 0;
+
+      // detail-content などのスクロール位置を保存値に戻す
       const activeScreen = document.querySelector('.screen.active');
-      if (!activeScreen) return;
-      const scrollable = activeScreen.querySelector('.detail-content, .pet-list, .folder-content');
-      if (!scrollable) return;
-      // 一度 scroll イベントを再発火させて iOS のレンダリングズレをリセット
-      const saved = scrollable.scrollTop;
-      scrollable.scrollTop = saved + 1;
-      scrollable.scrollTop = saved;
-    });
+      if (activeScreen) {
+        const scrollable = activeScreen.querySelector('.detail-content, .pet-list, .folder-content');
+        if (scrollable) {
+          scrollable.scrollTop = _savedScrollTop;
+          // iOS のレンダリングを強制更新させる
+          scrollable.style.webkitOverflowScrolling = 'auto';
+          requestAnimationFrame(() => {
+            scrollable.style.webkitOverflowScrolling = 'touch';
+          });
+        }
+      }
+    };
+
+    // RAF を2重にしてキーボード退場アニメーション後に確実に実行
+    requestAnimationFrame(() => requestAnimationFrame(doReset));
   }
 }
 
