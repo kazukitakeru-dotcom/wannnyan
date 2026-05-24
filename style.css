@@ -16,12 +16,12 @@ html, body { height: 100%; font-family: var(--font); background: var(--cream); c
 #app { height: 100vh; height: -webkit-fill-available; position: relative; overflow: hidden; overscroll-behavior: none; }
 
 /* ===== Screens ===== */
-.screen { position: absolute; inset: 0; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.35s cubic-bezier(0.4,0,0.2,1); background: var(--cream); overflow: hidden; }
-.screen.active { transform: translateX(0); }
-.screen.slide-out { transform: translateX(-30%); }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.35s cubic-bezier(0.4,0,0.2,1), visibility 0s linear 0.35s; background: var(--cream); overflow: hidden; visibility: hidden; pointer-events: none; }
+.screen.active { transform: translateX(0); visibility: visible; pointer-events: auto; transition: transform 0.35s cubic-bezier(0.4,0,0.2,1), visibility 0s linear 0s; }
+.screen.slide-out { transform: translateX(-30%); visibility: visible; pointer-events: none; transition: transform 0.35s cubic-bezier(0.4,0,0.2,1), visibility 0s linear 0s; }
 
 /* ===== Select ===== */
-#screen-select { justify-content: center; align-items: center; background: var(--warm); transform: translateX(0); }
+#screen-select { justify-content: center; align-items: center; background: var(--warm); transform: translateX(0); visibility: visible; pointer-events: auto; }
 .select-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 60% 40% at 20% 80%, rgba(200,132,74,0.18), transparent 70%), radial-gradient(ellipse 50% 40% at 80% 20%, rgba(122,156,192,0.15), transparent 70%); pointer-events: none; }
 .select-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 36px; padding: 32px 24px; }
 .app-logo { text-align: center; animation: fadeDown 0.6s ease both; }

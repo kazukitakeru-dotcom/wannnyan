@@ -1369,33 +1369,36 @@ async function goToDetail() {
     await renderDetailContent(pet, false);
   }
 
-  // iOS 2本指スワイプ等でスクリーン状態が壊れていても確実に戻れるよう
-  // screen-detail を強制的に active にして screen-hospital-records を非表示にする
+  // iOS ジェスチャー等でスクリーン状態が壊れていても確実に戻れるよう
+  // 全スクリーンをリセットして screen-detail だけを active にする
   const all = document.querySelectorAll('.screen');
   all.forEach(s => {
     s.classList.remove('active', 'slide-out');
     s.style.transform = '';
     s.style.transition = '';
+    s.style.visibility = '';
   });
-  // screen-detail だけ active にしてスライドイン
   const detailScreen = document.getElementById('screen-detail');
   const hospitalScreen = document.getElementById('screen-hospital-records');
-  detailScreen.style.transform = 'translateX(-30%)';
-  detailScreen.classList.add('active');
+  // hospital を画面右外に即座に配置（visibility は CSS class に任せる）
   if (hospitalScreen) {
-    hospitalScreen.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
     hospitalScreen.style.transform = 'translateX(100%)';
-    setTimeout(() => {
-      hospitalScreen.style.transform = '';
-      hospitalScreen.style.transition = '';
-    }, 350);
+    hospitalScreen.style.visibility = 'hidden';
   }
+  // detail をスライドインさせる
+  detailScreen.style.transform = 'translateX(-30%)';
+  detailScreen.style.visibility = 'visible';
+  detailScreen.classList.add('active');
   requestAnimationFrame(() => requestAnimationFrame(() => {
     detailScreen.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
     detailScreen.style.transform = 'translateX(0)';
     setTimeout(() => {
       detailScreen.style.transition = '';
       detailScreen.style.transform = '';
+      if (hospitalScreen) {
+        hospitalScreen.style.transform = '';
+        hospitalScreen.style.visibility = '';
+      }
     }, 350);
   }));
 }
