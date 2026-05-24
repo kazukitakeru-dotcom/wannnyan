@@ -1977,7 +1977,7 @@ async function renderHospitalMaster() {
               <table class="hospital-price-table">
                 <thead><tr><th>治療・ケア項目</th><th>目安料金</th></tr></thead>
                 <tbody>
-                  ${hosp.priceList.map(p => `<tr><td>${escHtml(p.name)}</td><td><strong>${Number(p.price).toLocaleString()}</strong> 円</td></tr>`).join('')}
+                  ${hosp.priceList.map(p => `<tr><td>${escHtml(p.name)}</td><td class="val">${Number(p.price).toLocaleString()} 円</td></tr>`).join('')}
                 </tbody>
               </table>
             </div>` : ''}
@@ -2039,6 +2039,9 @@ async function openHospitalModal(hospitalId = null) {
   document.getElementById('h-address').value = '';
   document.getElementById('h-memo').value = '';
 
+  _priceSortMode = false;
+  const sortBtn = document.getElementById('price-sort-btn');
+  if (sortBtn) { sortBtn.textContent = '並び替え'; sortBtn.style.background = 'rgba(200,132,74,0.12)'; }
   const editor = document.getElementById('hospital-price-editor');
   if (editor) editor.innerHTML = '';
   const docEditor = document.getElementById('hospital-doctor-editor');
@@ -2096,6 +2099,40 @@ function removeDoctorEditRow(rowId) {
   if (row) row.remove();
 }
 
+let _priceSortMode = false;
+
+function togglePriceSortMode() {
+  _priceSortMode = !_priceSortMode;
+  const btn = document.getElementById('price-sort-btn');
+  if (btn) {
+    btn.textContent = _priceSortMode ? '完了' : '並び替え';
+    btn.style.background = _priceSortMode ? 'rgba(200,132,74,0.3)' : 'rgba(200,132,74,0.12)';
+  }
+  document.querySelectorAll('.h-price-sort-btns').forEach(el => {
+    el.style.display = _priceSortMode ? 'flex' : 'none';
+  });
+  document.querySelectorAll('.h-price-del-btn').forEach(el => {
+    el.style.display = _priceSortMode ? 'none' : '';
+  });
+  document.querySelectorAll('.h-price-name,.h-price-val').forEach(el => {
+    el.style.pointerEvents = _priceSortMode ? 'none' : '';
+    el.style.opacity = _priceSortMode ? '0.5' : '';
+  });
+}
+
+function _movePriceRow(rowId, dir) {
+  const container = document.getElementById('hospital-price-editor');
+  const row = document.getElementById(rowId);
+  if (!row || !container) return;
+  const rows = Array.from(container.querySelectorAll('.hospital-price-row'));
+  const idx = rows.indexOf(row);
+  if (dir === -1 && idx > 0) {
+    container.insertBefore(row, rows[idx - 1]);
+  } else if (dir === 1 && idx < rows.length - 1) {
+    container.insertBefore(rows[idx + 1], row);
+  }
+}
+
 function addPriceEditRow(name = '', price = '') {
   const container = document.getElementById('hospital-price-editor');
   if (!container) return;
@@ -2105,6 +2142,10 @@ function addPriceEditRow(name = '', price = '') {
   row.className = 'hospital-price-row';
   row.id = rowId;
   row.innerHTML = `
+    <div class="h-price-sort-btns" style="display:none;flex-direction:column;gap:2px;">
+      <button type="button" onclick="_movePriceRow('${rowId}',-1)" style="border:none;background:rgba(44,36,24,0.08);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">↑</button>
+      <button type="button" onclick="_movePriceRow('${rowId}',1)" style="border:none;background:rgba(44,36,24,0.08);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">↓</button>
+    </div>
     <input type="text" class="h-price-name" placeholder="例: 爪切り, 5種混合" value="${escHtml(name)}">
     <input type="number" class="h-price-val" placeholder="料金(円)" value="${price}">
     <button type="button" class="h-price-del-btn" onclick="removePriceEditRow('${rowId}')">✕</button>
@@ -2315,10 +2356,13 @@ async function renderMedicalTimeline() {
   
   const sortedYears = Object.keys(groups).sort((a,b) => b.localeCompare(a));
   const currentYear = new Date().getFullYear().toString();
+  // 保存された開閉状態を読み込む（初回はデフォルト：最新年・今年を展開）
+  const savedOpenYears = _loadOpenYears(currentPetId);
+  const isFirstLoad = savedOpenYears.size === 0;
   
   container.innerHTML = sortedYears.map((year, index) => {
-    // 最初のグループ、あるいは今年ならデフォルト展開（openクラスを付与）
-    const isOpen = index === 0 || year === currentYear;
+    // 保存状態があればそれを優先、なければデフォルト（最初・今年）
+    const isOpen = isFirstLoad ? (index === 0 || year === currentYear) : savedOpenYears.has(year);
     const yearRecords = groups[year];
     
     const recordsHtml = yearRecords.map(rec => {
@@ -2389,22 +2433,41 @@ async function renderMedicalTimeline() {
   }).join('');
 }
 
+// 年フォルダの開閉状態を petId 別に保存
+function _yearGroupKey(petId) { return `wannyan_year_open_${petId}`; }
+function _loadOpenYears(petId) {
+  try { return new Set(JSON.parse(localStorage.getItem(_yearGroupKey(petId)) || '[]')); }
+  catch(e) { return new Set(); }
+}
+function _saveOpenYears(petId, openSet) {
+  try { localStorage.setItem(_yearGroupKey(petId), JSON.stringify([...openSet])); }
+  catch(e) {}
+}
+
 function toggleYearGroup(year) {
   const el = document.getElementById(`year-group-${year}`);
-  if (el) el.classList.toggle('open');
+  if (!el) return;
+  el.classList.toggle('open');
+  const openYears = _loadOpenYears(currentPetId);
+  if (el.classList.contains('open')) {
+    openYears.add(year);
+  } else {
+    openYears.delete(year);
+  }
+  _saveOpenYears(currentPetId, openYears);
 }
 
 // ========== まとめて通院記録 ==========
 let bulkTargetIds = new Set(); // 記録対象ペットIDセット
 
-// まとめ記録の除外メンバーを localStorage に永続保存する
-const BULK_EXCLUDED_KEY = 'wannyan_bulk_excluded';
+// まとめ記録の除外メンバーを petId 単位で個別保存する
+// キー: 'wannyan_bulk_excl'、値: 除外された petType-petId の配列
 function loadBulkExcluded() {
-  try { return new Set(JSON.parse(localStorage.getItem(BULK_EXCLUDED_KEY) || '[]')); }
+  try { return new Set(JSON.parse(localStorage.getItem('wannyan_bulk_excl') || '[]')); }
   catch(e) { return new Set(); }
 }
 function saveBulkExcluded(excludedSet) {
-  try { localStorage.setItem(BULK_EXCLUDED_KEY, JSON.stringify([...excludedSet])); }
+  try { localStorage.setItem('wannyan_bulk_excl', JSON.stringify([...excludedSet])); }
   catch(e) {}
 }
 
@@ -2713,7 +2776,7 @@ async function removeBulkTarget(id) {
     return;
   }
   bulkTargetIds.delete(id);
-  // 除外リストに追加して永続保存
+  // 除外リストに追加して永続保存（petId 単位）
   const excluded = loadBulkExcluded();
   excluded.add(id);
   saveBulkExcluded(excluded);
@@ -4458,12 +4521,29 @@ function saveWalkTimerState(state) {
   else localStorage.removeItem('wannyan_walk_timer');
 }
 
-function startWalkTimer(petId) {
+// 散歩グループ設定を保存・読み込み
+// キー: 'wannyan_walk_group_' + currentType + '_' + petId（個体ごとに設定）
+function _walkGroupKey(petId) { return `wannyan_walk_group_${currentType}_${petId}`; }
+function loadWalkGroup(petId) {
+  try { return JSON.parse(localStorage.getItem(_walkGroupKey(petId)) || 'null'); }
+  catch(e) { return null; }
+}
+function saveWalkGroup(petId, petIds) {
+  try { localStorage.setItem(_walkGroupKey(petId), JSON.stringify(petIds)); }
+  catch(e) {}
+}
+
+function startWalkTimer(petId, extraPetIds) {
+  // extraPetIds: 一緒に散歩する他の子のID配列（省略時は保存済みグループを使用）
+  const group = extraPetIds || loadWalkGroup(petId) || [petId];
+  const petIds = [...new Set([petId, ...group])];
   const state = {
-    petId,
+    petId,          // メイン（この画面の子）
+    petIds,         // 一緒に散歩する全員
     startTs: Date.now()
   };
   saveWalkTimerState(state);
+  saveWalkGroup(petId, petIds);
   // 即座にタイマーUIを描画してからtickを開始
   renderWalkTimer();
 }
@@ -4477,25 +4557,26 @@ async function stopWalkTimer() {
   const mins = Math.floor(elapsed / 60);
   const secs = elapsed % 60;
 
-  // 散歩実績をquickCaresに記録
-  if (currentPetId) {
-    const data = await loadData();
-    const pets = data[currentType] || [];
-    const idx = pets.findIndex(p => p.id === currentPetId);
-    if (idx !== -1) {
-      const pet = ensurePetHospitalFields(pets[idx]);
-      const dateStr = new Date().toISOString().split('T')[0];
-      if (!pet.quickCares[dateStr]) pet.quickCares[dateStr] = {};
-      pet.quickCares[dateStr].walkMinutes = (pet.quickCares[dateStr].walkMinutes || 0) + mins;
-      pets[idx] = pet;
-      data[currentType] = pets;
-      await saveData(data);
-    }
-  }
+  // state.petIds 全員に散歩記録を保存（複数頭対応）
+  const petIds = state.petIds || [state.petId];
+  const data = await loadData();
+  const dateStr = new Date().toISOString().split('T')[0];
+  ['dog','cat'].forEach(type => {
+    (data[type] || []).forEach((pet, idx) => {
+      if (petIds.includes(`${type}-${pet.id}`) || petIds.includes(pet.id)) {
+        const p = ensurePetHospitalFields(pet);
+        if (!p.quickCares[dateStr]) p.quickCares[dateStr] = {};
+        p.quickCares[dateStr].walkMinutes = (p.quickCares[dateStr].walkMinutes || 0) + mins;
+        data[type][idx] = p;
+      }
+    });
+  });
+  await saveData(data);
 
   saveWalkTimerState(null);
   renderWalkTimer();
-  showToast(`散歩終了 🐾 ${mins}分${secs}秒`);
+  const memberCount = petIds.length;
+  showToast(`散歩終了 🐾 ${mins}分${secs}秒${memberCount > 1 ? ` (${memberCount}頭)` : ''}`);
 }
 
 function tickWalkTimer() {
@@ -4610,24 +4691,78 @@ function renderWalkTimer() {
       </div>`;
   }
 
+  // 複数頭散歩グループを読み込んで表示用テキスト生成
+  function buildGroupLabel(groupPetIds) {
+    if (!groupPetIds || groupPetIds.length <= 1) return '';
+    return loadData().then(d => {
+      const all = [...(d.dog||[]).map(p=>({...p,t:'dog'})), ...(d.cat||[]).map(p=>({...p,t:'cat'}))];
+      const names = groupPetIds.map(id => {
+        const found = all.find(p => `${p.t}-${p.id}` === id || p.id === id);
+        return found ? found.name : id;
+      });
+      return names.join('・');
+    });
+  }
+
   if (state && state.petId === petId) {
-    container.innerHTML = `
-      ${envHtml}
-      <div id="walk-timer-display" class="walk-timer-display"></div>
-      <button class="walk-timer-stop-btn" onclick="stopWalkTimer()">🏁 散歩終了</button>
-    `;
-    // 即座に表示してからインターバル開始
-    tickWalkTimer();
+    const groupIds = state.petIds || [petId];
+    loadData().then(d => {
+      const all = [...(d.dog||[]).map(p=>({...p,t:'dog'})), ...(d.cat||[]).map(p=>({...p,t:'cat'}))];
+      const groupNames = groupIds.map(id => {
+        const found = all.find(p => `${p.t}-${p.id}` === id || p.id === id);
+        return found ? found.name : '';
+      }).filter(Boolean);
+      const groupLabel = groupNames.length > 1 ? `<div style="font-size:11px;color:var(--text-mid);font-weight:700;margin-bottom:4px;">🐾 ${groupNames.join('・')} で散歩中</div>` : '';
+      container.innerHTML = `
+        ${envHtml}
+        ${groupLabel}
+        <div id="walk-timer-display" class="walk-timer-display"></div>
+        <button class="walk-timer-stop-btn" onclick="stopWalkTimer()">🏁 散歩終了</button>
+      `;
+      tickWalkTimer();
+    });
   } else {
-    const histHtml = buildWalkHistoryHtml();
-    container.innerHTML = `
-      ${envHtml}
-      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
-        <button class="walk-timer-start-btn" onclick="startWalkTimer('${petId}')">🐾 散歩スタート</button>
-        <button onclick="toggleWalkHistory()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📋 散歩記録</button>
-      </div>
-      <div id="walk-history-panel" style="display:none;">${histHtml}</div>
-    `;
+    // 保存済みグループを読み込んでメンバー表示
+    const savedGroup = loadWalkGroup(petId) || [petId];
+    loadData().then(d => {
+      const all = [...(d.dog||[]).map(p=>({...p,t:'dog'})), ...(d.cat||[]).map(p=>({...p,t:'cat'}))];
+      const groupNames = savedGroup.map(id => {
+        const found = all.find(p => `${p.t}-${p.id}` === id || p.id === id);
+        return found ? found.name : '';
+      }).filter(Boolean);
+      const groupLabel = groupNames.length > 1
+        ? `<div style="font-size:11px;color:var(--text-mid);font-weight:700;margin:6px 0 2px;">🐾 散歩メンバー：${groupNames.join('・')}</div>`
+        : '';
+
+      // 他の子を一覧して選択できるUI
+      const otherPets = all.filter(p => p.id !== petId);
+      const memberCheckboxes = otherPets.length > 0 ? `
+        <div id="walk-member-panel" style="display:none;margin-top:6px;background:rgba(44,36,24,0.03);border-radius:10px;padding:8px 10px;">
+          <div style="font-size:11px;color:var(--text-light);font-weight:700;margin-bottom:6px;">一緒に散歩する子を選択</div>
+          ${otherPets.map(p => {
+            const key = `${p.t}-${p.id}`;
+            const checked = savedGroup.includes(key) || savedGroup.includes(p.id) ? 'checked' : '';
+            return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;font-weight:700;">
+              <input type="checkbox" id="walk-member-${key}" value="${key}" ${checked} style="width:16px;height:16px;accent-color:var(--accent);">
+              ${escHtml(p.name)}
+            </label>`;
+          }).join('')}
+          <button onclick="_applyWalkGroup('${petId}')" style="margin-top:8px;width:100%;border:none;background:var(--accent);color:white;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;">メンバーを更新</button>
+        </div>` : '';
+
+      const histHtml = buildWalkHistoryHtml();
+      container.innerHTML = `
+        ${envHtml}
+        ${groupLabel}
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+          <button class="walk-timer-start-btn" onclick="startWalkTimer('${petId}')">🐾 散歩スタート</button>
+          <button onclick="toggleWalkMemberPanel()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">👥 メンバー</button>
+          <button onclick="toggleWalkHistory()" style="margin-left:auto;border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📋</button>
+        </div>
+        ${memberCheckboxes}
+        <div id="walk-history-panel" style="display:none;">${histHtml}</div>
+      `;
+    });
   }
   }); // end loadData().then
 }
@@ -4636,6 +4771,23 @@ function toggleWalkHistory() {
   const panel = document.getElementById('walk-history-panel');
   if (!panel) return;
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleWalkMemberPanel() {
+  const panel = document.getElementById('walk-member-panel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function _applyWalkGroup(petId) {
+  const checkboxes = document.querySelectorAll('[id^="walk-member-"]');
+  const selected = [petId]; // 自分は必ず含む
+  checkboxes.forEach(cb => {
+    if (cb.checked) selected.push(cb.value);
+  });
+  saveWalkGroup(petId, [...new Set(selected)]);
+  renderWalkTimer();
+  showToast('散歩メンバーを更新しました');
 }
 
 // 散歩記録を後から追加するモーダル

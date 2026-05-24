@@ -390,8 +390,11 @@
         <label class="field-label">病院の特色・印象 (メモ)</label>
         <textarea id="h-memo" class="field-input" rows="3" placeholder="夜間対応あり、優しい、日曜日開院など"></textarea>
 
-        <label class="field-label" style="margin-top:10px;">📋 治療メニュー・料金表（目安価格）</label>
-        <div id="hospital-price-editor" class="hospital-price-editor" style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+          <label class="field-label" style="margin:0;">📋 治療メニュー・料金表（目安価格）</label>
+          <button type="button" id="price-sort-btn" onclick="togglePriceSortMode()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">並び替え</button>
+        </div>
+        <div id="hospital-price-editor" class="hospital-price-editor" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
           </div>
         <button type="button" class="allergy-add-btn" onclick="addPriceEditRow()" style="margin-top:8px;padding:6px;font-size:12px;">＋ 料金メニューを追加</button>
       </div>

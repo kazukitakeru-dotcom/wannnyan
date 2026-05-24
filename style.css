@@ -1251,8 +1251,8 @@ a, button {
 }
 .hospital-price-table td.val {
   text-align: right;
-  font-weight: 700;
-  color: var(--accent);
+  font-weight: 400;
+  color: var(--text-dark);
 }
 
 /* ==========================================================================

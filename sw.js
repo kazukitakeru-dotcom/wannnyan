@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wannyan-v17';
+const CACHE_NAME = 'wannyan-v18';
 const ASSETS = [
   './',
   './index.html',
