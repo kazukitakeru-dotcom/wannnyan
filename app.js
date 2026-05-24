@@ -7,7 +7,7 @@ let editMode = false;
 let surveyEditMode = false;
 let sortMode = 'name';
 let familyOnlyMode = false; // 家族タグがある子のみ表示
-let manualSortActive = false; // 手動並び替えモード
+let reorderModeActive = false; // 並び替えモード（↑↓表示）
 
 // 手動並び替え順序を currentType 別に保存
 function _manualOrderKey() { return `wannyan_manual_order_${currentType}`; }
@@ -291,7 +291,7 @@ async function renderList() {
   }
 
   let sorted;
-  if (manualSortActive) {
+  if (reorderModeActive) {
     const order = loadManualOrder();
     const orderMap = new Map(order.map((id, i) => [id, i]));
     sorted = [...filtered].sort((a, b) => {
@@ -321,17 +321,17 @@ async function renderList() {
     const genderIcon = pet.gender==='オス'?'♂':pet.gender==='メス'?'♀':'';
     // 続柄スタンプ
     const roleStamp = pet.familyRole ? `<div class="role-stamp">${escHtml(pet.familyRole)}</div>` : '';
-    const manualBtns = manualSortActive ? `
+    const manualBtns = reorderModeActive ? `
       <div class="pet-card-order-btns">
         <button onclick="event.stopPropagation();movePetOrder('${pet.id}',-1)" ${i===0?'disabled':''}>↑</button>
         <button onclick="event.stopPropagation();movePetOrder('${pet.id}',1)" ${i===sorted.length-1?'disabled':''}>↓</button>
       </div>` : `<div class="pet-card-arrow">›</div>`;
-    return `<div class="pet-card" onclick="${manualSortActive?'':` openDetail('${pet.id}') `}" style="animation-delay:${i*0.04}s;${manualSortActive?'cursor:default;':''}">
+    return `<div class="pet-card" onclick="${reorderModeActive?'':` openDetail('${pet.id}') `}" style="animation-delay:${i*0.04}s;${reorderModeActive?'cursor:default;':''}">
       <div class="pet-card-photo-wrap">
         ${photoHtml}
         ${roleStamp}
       </div>
-      <div class="pet-card-info" onclick="${manualSortActive?`openDetail('${pet.id}')`:''}" style="${manualSortActive?'cursor:pointer;flex:1;':''}">
+      <div class="pet-card-info" onclick="${reorderModeActive?`openDetail('${pet.id}')`:''}" style="${reorderModeActive?'cursor:pointer;flex:1;':''}">
         <div class="pet-card-name">${escHtml(pet.name)} ${genderIcon}</div>
         <div class="pet-card-meta">${escHtml(pet.breed||'')} ${age}</div>
         ${pet.familyTag ? `<div class="pet-card-family-tag">${escHtml(pet.familyTag)}</div>` : ''}
@@ -359,17 +359,28 @@ async function setFamilyTagFilter(tag) {
 }
 async function filterList() { await renderList(); }
 async function sortList(mode) {
-  if (mode === 'manual') {
-    manualSortActive = !manualSortActive;
-    document.getElementById('sort-manual-btn').classList.toggle('active', manualSortActive);
-  } else {
-    manualSortActive = false;
-    document.getElementById('sort-manual-btn').classList.remove('active');
-    sortMode = mode;
-    document.getElementById('sort-name-btn').classList.toggle('active', mode==='name');
-    document.getElementById('sort-date-btn').classList.toggle('active', mode==='date');
-  }
+  sortMode = mode;
+  reorderModeActive = false;
+  document.getElementById('sort-name-btn').classList.toggle('active', mode==='name');
+  document.getElementById('sort-date-btn').classList.toggle('active', mode==='date');
+  document.getElementById('sort-manual-btn').classList.toggle('active', mode==='manual');
+  document.getElementById('sort-reorder-btn').classList.remove('active');
+  document.querySelector('.sort-sub-row').classList.toggle('sort-manual-active', mode==='manual');
   await renderList();
+}
+
+function toggleReorderMode() {
+  reorderModeActive = !reorderModeActive;
+  // 並び替えモード中は手動順で表示する
+  if (reorderModeActive && sortMode !== 'manual') {
+    sortMode = 'manual';
+    document.getElementById('sort-name-btn').classList.remove('active');
+    document.getElementById('sort-date-btn').classList.remove('active');
+    document.getElementById('sort-manual-btn').classList.add('active');
+    document.querySelector('.sort-sub-row').classList.add('sort-manual-active');
+  }
+  document.getElementById('sort-reorder-btn').classList.toggle('active', reorderModeActive);
+  renderList();
 }
 
 function toggleFamilyOnly() {

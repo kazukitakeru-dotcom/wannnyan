@@ -63,6 +63,12 @@ html, body { height: 100%; font-family: var(--font); background: var(--cream); c
 .sort-buttons { display: flex; gap: 8px; }
 .sort-btn { flex: 1; padding: 8px; border: 1.5px solid rgba(44,36,24,0.12); background: var(--white); border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text-light); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
 .sort-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+.sort-sub-row { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.sort-sub-row-right { display: flex; gap: 6px; }
+.sort-sub-row-btn { padding: 5px 10px; border: 1.5px solid rgba(44,36,24,0.12); background: var(--white); border-radius: 8px; font-size: 11px; font-weight: 600; color: var(--text-light); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+.sort-sub-row-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+#sort-reorder-btn { display: none; }
+.sort-manual-active #sort-reorder-btn { display: inline-block; }
 
 /* ===== Pet List ===== */
 .pet-list { flex: 1; overflow-y: auto; padding: 10px 14px calc(100px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }

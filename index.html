@@ -62,7 +62,13 @@
           <button class="sort-btn active" id="sort-name-btn" onclick="sortList('name')">名前順</button>
           <button class="sort-btn" id="sort-date-btn" onclick="sortList('date')">記録日順</button>
           <button class="sort-btn" id="sort-manual-btn" onclick="sortList('manual')">手動</button>
-          <button class="sort-btn" id="sort-family-btn" onclick="toggleFamilyOnly()">家族のみ</button>
+        </div>
+        <div class="sort-sub-row">
+          <div class="sort-sub-row-left"></div>
+          <div class="sort-sub-row-right">
+            <button class="sort-sub-row-btn" id="sort-reorder-btn" onclick="toggleReorderMode()">並び替え</button>
+            <button class="sort-sub-row-btn" id="sort-family-btn" onclick="toggleFamilyOnly()">家族のみ</button>
+          </div>
         </div>
       </div>
       <div id="family-tag-bar" class="family-tag-bar" style="display:none"></div>
