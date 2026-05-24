@@ -1318,3 +1318,8 @@ a, button {
 .walk-timer-start-btn:active { transform: scale(0.96); }
 .walk-timer-stop-btn { width: 100%; border: none; background: #e8ded5; color: var(--text-mid); border-radius: 12px; padding: 11px; font-size: 15px; font-weight: 800; cursor: pointer; font-family: var(--font); margin-top: 8px; transition: transform 0.15s; }
 .walk-timer-stop-btn:active { transform: scale(0.96); }
+
+/* ========== ペット一覧 手動並び替えボタン ========== */
+.pet-card-order-btns { display: flex; flex-direction: column; gap: 3px; padding: 0 4px; }
+.pet-card-order-btns button { border: none; background: rgba(200,132,74,0.12); color: var(--accent); border-radius: 6px; padding: 4px 8px; font-size: 13px; font-weight: 700; cursor: pointer; line-height: 1; }
+.pet-card-order-btns button:disabled { opacity: 0.25; cursor: default; }

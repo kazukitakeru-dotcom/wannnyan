@@ -6,6 +6,19 @@ let currentPetId = null;
 let editMode = false;
 let surveyEditMode = false;
 let sortMode = 'name';
+let familyOnlyMode = false; // 家族タグがある子のみ表示
+let manualSortActive = false; // 手動並び替えモード
+
+// 手動並び替え順序を currentType 別に保存
+function _manualOrderKey() { return `wannyan_manual_order_${currentType}`; }
+function loadManualOrder() {
+  try { return JSON.parse(localStorage.getItem(_manualOrderKey()) || '[]'); }
+  catch(e) { return []; }
+}
+function saveManualOrder(ids) {
+  try { localStorage.setItem(_manualOrderKey(), JSON.stringify(ids)); }
+  catch(e) {}
+}
 let deletePendingId = null;
 let tempPhotoData = null;
 let breedSortMode = 'group';
@@ -272,9 +285,25 @@ async function renderList() {
     filtered = filtered.filter(p => (p.familyTag||'') === currentFamilyTagFilter);
   }
 
-  const sorted = [...filtered].sort((a,b)=>
-    sortMode==='name' ? (a.name||'').localeCompare(b.name||'','ja') : (b.updatedAt||0)-(a.updatedAt||0)
-  );
+  // 家族タグがある子のみ表示モード
+  if (familyOnlyMode) {
+    filtered = filtered.filter(p => !!p.familyTag);
+  }
+
+  let sorted;
+  if (manualSortActive) {
+    const order = loadManualOrder();
+    const orderMap = new Map(order.map((id, i) => [id, i]));
+    sorted = [...filtered].sort((a, b) => {
+      const ai = orderMap.has(a.id) ? orderMap.get(a.id) : 9999;
+      const bi = orderMap.has(b.id) ? orderMap.get(b.id) : 9999;
+      return ai !== bi ? ai - bi : (a.name||'').localeCompare(b.name||'','ja');
+    });
+  } else {
+    sorted = [...filtered].sort((a,b)=>
+      sortMode==='name' ? (a.name||'').localeCompare(b.name||'','ja') : (b.updatedAt||0)-(a.updatedAt||0)
+    );
+  }
 
   // 家族タグチップバーを描画
   renderFamilyTagBar(pets);
@@ -292,17 +321,22 @@ async function renderList() {
     const genderIcon = pet.gender==='オス'?'♂':pet.gender==='メス'?'♀':'';
     // 続柄スタンプ
     const roleStamp = pet.familyRole ? `<div class="role-stamp">${escHtml(pet.familyRole)}</div>` : '';
-    return `<div class="pet-card" onclick="openDetail('${pet.id}')" style="animation-delay:${i*0.04}s">
+    const manualBtns = manualSortActive ? `
+      <div class="pet-card-order-btns">
+        <button onclick="event.stopPropagation();movePetOrder('${pet.id}',-1)" ${i===0?'disabled':''}>↑</button>
+        <button onclick="event.stopPropagation();movePetOrder('${pet.id}',1)" ${i===sorted.length-1?'disabled':''}>↓</button>
+      </div>` : `<div class="pet-card-arrow">›</div>`;
+    return `<div class="pet-card" onclick="${manualSortActive?'':` openDetail('${pet.id}') `}" style="animation-delay:${i*0.04}s;${manualSortActive?'cursor:default;':''}">
       <div class="pet-card-photo-wrap">
         ${photoHtml}
         ${roleStamp}
       </div>
-      <div class="pet-card-info">
+      <div class="pet-card-info" onclick="${manualSortActive?`openDetail('${pet.id}')`:''}" style="${manualSortActive?'cursor:pointer;flex:1;':''}">
         <div class="pet-card-name">${escHtml(pet.name)} ${genderIcon}</div>
         <div class="pet-card-meta">${escHtml(pet.breed||'')} ${age}</div>
         ${pet.familyTag ? `<div class="pet-card-family-tag">${escHtml(pet.familyTag)}</div>` : ''}
       </div>
-      <div class="pet-card-arrow">›</div>
+      ${manualBtns}
     </div>`;
   }).join('');
 }
@@ -325,10 +359,45 @@ async function setFamilyTagFilter(tag) {
 }
 async function filterList() { await renderList(); }
 async function sortList(mode) {
-  sortMode=mode;
-  document.getElementById('sort-name-btn').classList.toggle('active',mode==='name');
-  document.getElementById('sort-date-btn').classList.toggle('active',mode==='date');
+  if (mode === 'manual') {
+    manualSortActive = !manualSortActive;
+    document.getElementById('sort-manual-btn').classList.toggle('active', manualSortActive);
+  } else {
+    manualSortActive = false;
+    document.getElementById('sort-manual-btn').classList.remove('active');
+    sortMode = mode;
+    document.getElementById('sort-name-btn').classList.toggle('active', mode==='name');
+    document.getElementById('sort-date-btn').classList.toggle('active', mode==='date');
+  }
   await renderList();
+}
+
+function toggleFamilyOnly() {
+  familyOnlyMode = !familyOnlyMode;
+  document.getElementById('sort-family-btn').classList.toggle('active', familyOnlyMode);
+  renderList();
+}
+
+function movePetOrder(petId, dir) {
+  const order = loadManualOrder();
+  // 現在の並び順を取得（order未登録の子は末尾に）
+  const container = document.getElementById('pet-list');
+  const cards = Array.from(container.querySelectorAll('.pet-card'));
+  // DOM順から現在のID順を作成
+  const currentIds = cards.map(c => {
+    const btn = c.querySelector('[onclick*="movePetOrder"]');
+    if (!btn) return null;
+    const m = btn.getAttribute('onclick').match(/movePetOrder\('([^']+)'/);
+    return m ? m[1] : null;
+  }).filter(Boolean);
+
+  const idx = currentIds.indexOf(petId);
+  if (idx === -1) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= currentIds.length) return;
+  [currentIds[idx], currentIds[newIdx]] = [currentIds[newIdx], currentIds[idx]];
+  saveManualOrder(currentIds);
+  renderList();
 }
 
 // 全ペットから家族タグ一覧を取得（サジェスト用）
@@ -4757,7 +4826,7 @@ function renderWalkTimer() {
         <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
           <button class="walk-timer-start-btn" onclick="startWalkTimer('${petId}')">🐾 散歩スタート</button>
           <button onclick="toggleWalkMemberPanel()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">👥 メンバー</button>
-          <button onclick="toggleWalkHistory()" style="margin-left:auto;border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📋</button>
+          <button onclick="toggleWalkHistory()" style="margin-left:auto;border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📋 散歩記録帳</button>
         </div>
         ${memberCheckboxes}
         <div id="walk-history-panel" style="display:none;">${histHtml}</div>
