@@ -233,6 +233,19 @@ async function selectType(type) {
   applyTypeClass(type);
   document.getElementById('list-type-emoji').textContent = type==='dog'?'🐕':'🐈';
   document.getElementById('list-type-name').textContent  = type==='dog'?'いぬ':'ねこ';
+  // 名前検索inputのキーボードによる画面ズレ防止
+  const searchEl = document.getElementById('search-input');
+  if (searchEl) {
+    searchEl.setAttribute('readonly', 'readonly');
+    const removeReadonly = () => {
+      searchEl.removeAttribute('readonly');
+      _suppressBackgroundScroll();
+    };
+    searchEl.addEventListener('touchend', removeReadonly, { once: true });
+    searchEl.addEventListener('click', removeReadonly, { once: true });
+    searchEl.addEventListener('focus', _suppressBackgroundScroll);
+    searchEl.addEventListener('blur', _suppressBackgroundScroll);
+  }
   showScreen('screen-list');
   await renderList();
 }
@@ -310,8 +323,7 @@ async function renderList() {
     );
   }
 
-  // 家族タグチップバーを描画
-  renderFamilyTagBar(pets);
+  // 家族タグチップバーを描画（削除）
 
   const container = document.getElementById('pet-list');
   if(!sorted.length){
@@ -854,7 +866,7 @@ function selectBreed(name){
   closeModal(null,'modal-breed');
 }
 
-// ========== 問題フォルダ画面 ==========
+// ========== フォルダ画面 ==========
 async function renderFolderScreen(){
   const data=await loadData(); const pets=data[currentType]||[];
   const rawSearch=(document.getElementById('folder-search')?.value||'').trim();
@@ -866,6 +878,34 @@ async function renderFolderScreen(){
   const issues=ISSUES[currentType];
   const container=document.getElementById('folder-content');
   let html='';
+
+  // 家族タグセクション
+  const allTags=[...new Set(pets.map(p=>p.familyTag).filter(Boolean))];
+  if(allTags.length>0){
+    html+=`<div class="folder-section-header">🏷️ 家族タグ</div>`;
+    allTags.forEach(tag=>{
+      const tagPets=filtered.filter(p=>p.familyTag===tag);
+      if(tagPets.length===0&&search) return;
+      html+=`<div class="folder-issue-section">
+        <div class="folder-issue-title">🐾 ${escHtml(tag)}（${tagPets.length}件）</div>
+        ${tagPets.length===0
+          ?`<div class="folder-empty">この家族タグの子はいません</div>`
+          :tagPets.map(p=>{
+            const photoHtml=p.photo?`<div class="folder-pet-photo"><img src="${p.photo}" alt="${escHtml(p.name)}"></div>`:`<div class="folder-pet-photo">${currentType==='dog'?'🐕':'🐈'}</div>`;
+            const breedText=p.breed?`<span class="folder-pet-breed">${escHtml(p.breed)}</span>`:'';
+            return `<div class="folder-pet-card" onclick="openDetail('${p.id}');closeIssueFolder2();">
+              ${photoHtml}
+              <div>
+                <div class="folder-pet-name">${escHtml(p.name)}${breedText}</div>
+              </div>
+            </div>`;
+          }).join('')}
+      </div>`;
+    });
+  }
+
+  // 問題セクション
+  html+=`<div class="folder-section-header">📋 問題別</div>`;
   issues.forEach(issue=>{
     const withIssue=filtered.filter(p=>(p.issues||{})[issue.key]?.memo);
     html+=`<div class="folder-issue-section">
@@ -886,6 +926,7 @@ async function renderFolderScreen(){
         }).join('')}
     </div>`;
   });
+
   container.innerHTML=html||`<div class="folder-empty">記録がありません</div>`;
 }
 function closeIssueFolder2(){
