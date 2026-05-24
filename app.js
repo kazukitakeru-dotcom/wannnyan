@@ -2162,7 +2162,7 @@ async function renderHospitalMaster() {
           </div>
 
           <div class="hospital-actions-bar">
-            <button class="hospital-act-btn share" onclick="shareHospital('${hosp.id}')">📋 コピーして共有</button>
+            <button class="hospital-act-btn share" onclick="shareHospital('${hosp.id}')">📤 シェア</button>
             <button class="hospital-act-btn edit" onclick="openHospitalModal('${hosp.id}')">✏️ 編集</button>
             <button class="hospital-act-btn delete" onclick="deleteHospitalRecord('${hosp.id}')">✕ 削除</button>
           </div>
@@ -2444,17 +2444,17 @@ function fallbackCopyTextToClipboard(text) {
   document.body.removeChild(textArea);
 }
 
-// ワンタップシェア機能（直接クリップボードにコピー）
+// ワンタップシェア機能
 async function shareHospital(hospitalId) {
-  const data = await loadData();
-  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
-  if (!pet) return;
-  
   const hosp = (await getHospitals()).find(h => h.id === hospitalId);
   if (!hosp) return;
   
   const text = generateHospitalShareText(hosp);
   
+  if (navigator.share) {
+    navigator.share({ title: hosp.name, text }).catch(() => {});
+    return;
+  }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
       showToast('病院情報をコピーしました！LINE等に貼り付けられます ✓');
@@ -5272,13 +5272,30 @@ async function renderTorisetsu(petId) {
   const likes = t.likes || s.likes || '';
   const dislikes = t.dislikes || s.dislikes || '';
 
+  // 写真エリア（ペット写真を使用、タップでプロフィール写真変更案内）
+  const photoSrc = pet.photo || null;
+  const photoHtml = photoSrc
+    ? `<img src="${photoSrc}" style="width:80px;height:80px;object-fit:cover;border-radius:50%;border:3px solid var(--accent);display:block;">`
+    : `<div style="width:80px;height:80px;border-radius:50%;background:var(--warm);border:3px dashed rgba(200,132,74,0.4);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;" onclick="showToast('プロフィール画面の編集から写真を設定できます')">
+        <span style="font-size:24px;">${currentType==='dog'?'🐕':'🐈'}</span>
+        <span style="font-size:9px;color:var(--text-light);font-weight:700;text-align:center;">写真を<br>設定</span>
+       </div>`;
+
   container.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      <div class="torisetsu-row"><span class="torisetsu-label">名前</span><span class="torisetsu-val">${escHtml(pet.name)}</span></div>
-      <div class="torisetsu-row"><span class="torisetsu-label">年齢</span><span class="torisetsu-val">${escHtml(age)}</span></div>
-      <div class="torisetsu-row"><span class="torisetsu-label">性別</span><span class="torisetsu-val">${escHtml(pet.gender || '不明')}</span></div>
-      <div class="torisetsu-row"><span class="torisetsu-label">体重</span><span class="torisetsu-val">${pet.weight ? escHtml(pet.weight) + 'kg' : '不明'}</span></div>
-      <div class="torisetsu-row"><span class="torisetsu-label">${currentType === 'dog' ? '犬種' : '猫種'}</span><span class="torisetsu-val">${escHtml(pet.breed || '不明')}</span></div>
+    <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;">
+      <div style="flex-shrink:0;">
+        ${photoHtml}
+        <div style="font-size:9px;color:var(--text-light);text-align:center;margin-top:4px;">プロフィールで設定</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+        <div class="torisetsu-row"><span class="torisetsu-label">名前</span><span class="torisetsu-val">${escHtml(pet.name)}</span></div>
+        <div class="torisetsu-row"><span class="torisetsu-label">年齢</span><span class="torisetsu-val">${escHtml(age)}</span></div>
+        <div class="torisetsu-row"><span class="torisetsu-label">性別</span><span class="torisetsu-val">${escHtml(pet.gender || '不明')}</span></div>
+        <div class="torisetsu-row"><span class="torisetsu-label">体重</span><span class="torisetsu-val">${pet.weight ? escHtml(pet.weight) + 'kg' : '不明'}</span></div>
+        <div class="torisetsu-row"><span class="torisetsu-label">${currentType === 'dog' ? '犬種' : '猫種'}</span><span class="torisetsu-val">${escHtml(pet.breed || '不明')}</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
       <div class="torisetsu-row"><span class="torisetsu-label">避妊・去勢</span><span class="torisetsu-val">${escHtml(neutered)}</span></div>
       <div class="torisetsu-row"><span class="torisetsu-label">アレルギー</span><span class="torisetsu-val">${escHtml(allergies)}</span></div>
       <div class="torisetsu-row torisetsu-row-col"><span class="torisetsu-label">ご飯</span><span class="torisetsu-val">${t.foodTimes ? escHtml(t.foodTimes) + '回/日' : '未設定'}${t.foodTime ? '　時間: ' + escHtml(t.foodTime) : ''}${t.foodAmount ? '　1回: ' + escHtml(t.foodAmount) : ''}</span></div>
