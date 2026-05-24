@@ -60,12 +60,13 @@
         </div>
         <div class="sort-buttons">
           <button class="sort-btn active" id="sort-name-btn" onclick="sortList('name')">名前順</button>
-          <button class="sort-btn" id="sort-date-btn" onclick="sortList('date')">記録日順</button>
+          <button class="sort-btn" id="sort-date-btn" onclick="sortList('date')">登録日順</button>
           <button class="sort-btn" id="sort-manual-btn" onclick="sortList('manual')">手動</button>
         </div>
         <div class="sort-sub-row">
           <div class="sort-sub-row-left"></div>
           <div class="sort-sub-row-right">
+            <button class="sort-sub-row-btn" id="sort-dir-btn" onclick="toggleSortDir()">昇順</button>
             <button class="sort-sub-row-btn" id="sort-reorder-btn" onclick="toggleReorderMode()">並び替え</button>
             <button class="sort-sub-row-btn" id="sort-family-btn" onclick="toggleFamilyOnly()">家族のみ</button>
           </div>
@@ -323,13 +324,44 @@
         </div>
 
         <div class="detail-card" style="margin-top:14px;">
-          <div class="detail-card-title">📝 気になるメモ（次回通院用）</div>
-          <p class="field-age-note" style="margin-bottom:6px;">追加したメモは通院記録画面に表示されます。通院記録で「外す」と戻ります。削除はワンステップ確認あり。</p>
+          <div class="detail-card-title">📝 気になるメモ（次回通院用ボード）</div>
+          <p class="field-age-note" style="margin-bottom:6px;">気になることをボードに貼っておきましょう。通院記録画面でタップして記録に含めることができます。</p>
           <div id="pending-notes-list" style="margin-bottom:10px;"></div>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="pending-note-input" class="field-input" style="flex:1;margin-bottom:0" placeholder="次回聞くこと・気になること…">
-            <button class="btn-primary" style="padding:10px 14px;border-radius:10px;font-size:13px;white-space:nowrap;" onclick="addPendingNote(currentPetId)">追加</button>
+          <div style="display:flex;flex-direction:column;gap:8px;background:rgba(44,36,24,0.03);border-radius:10px;padding:10px;">
+            <input type="text" id="pending-note-input" class="field-input" style="margin-bottom:0" placeholder="気になること・次回質問したいこと…">
+            <div style="display:flex;gap:8px;">
+              <div style="flex:1;">
+                <label class="field-label" style="font-size:11px;margin-bottom:2px;">日付</label>
+                <input type="date" id="pending-note-date" class="field-input" style="margin-bottom:0;font-size:12px;">
+              </div>
+              <div style="flex:1;">
+                <label class="field-label" style="font-size:11px;margin-bottom:2px;">時間</label>
+                <input type="time" id="pending-note-time" class="field-input" style="margin-bottom:0;font-size:12px;">
+              </div>
+            </div>
+            <div>
+              <label class="field-label" style="font-size:11px;margin-bottom:2px;">場所</label>
+              <input type="text" id="pending-note-location" class="field-input" style="margin-bottom:0;font-size:12px;" placeholder="例: 公園、病院帰り">
+            </div>
+            <div>
+              <label class="field-label" style="font-size:11px;margin-bottom:2px;">写真（任意）</label>
+              <div class="photo-upload-area" style="min-height:60px;" onclick="document.getElementById('pending-note-photo-input').click()">
+                <img id="pending-note-photo-preview" class="photo-preview hidden" src="" alt="">
+                <div id="pending-note-photo-placeholder" class="photo-placeholder" style="font-size:12px;gap:4px;">
+                  <span>📷</span><span>写真を添付</span>
+                </div>
+                <input type="file" id="pending-note-photo-input" accept="image/*,image/heic,image/heif" class="hidden" onchange="previewPendingNotePhoto(event)">
+              </div>
+              <button id="pending-note-photo-remove" onclick="removePendingNotePhoto()" style="display:none;margin-top:4px;border:none;background:rgba(200,80,80,0.12);color:#c04040;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;">写真を外す</button>
+            </div>
+            <button class="btn-primary" style="padding:10px 14px;border-radius:10px;font-size:13px;white-space:nowrap;" onclick="addPendingNote(currentPetId)">ボードに追加</button>
           </div>
+        </div>
+
+        <div class="detail-card" style="margin-top:14px;">
+          <div class="detail-card-title">📋 うちの子のトリセツ</div>
+          <p class="field-age-note" style="margin-bottom:8px;">お預けの際に「この子はこんな子です！」と伝えるための情報カードです。シェアボタンでLINE等に貼り付けられます。</p>
+          <div id="torisetsu-content"></div>
         </div>
       </div>
 
@@ -492,7 +524,7 @@
         <label class="field-label">診療内容・症状メモ (自分だけの口コミ)</label>
         
         <div id="m-pending-notes-area" style="display:none; margin-bottom:8px; background:rgba(200,132,74,0.06); border-radius:10px; padding:10px; border:1px solid rgba(200,132,74,0.2);">
-          <p class="issue-memo-label" style="margin:0 0 6px 0">📝 次回通院用メモ（保存に含める場合はそのままに、外す場合は「外す」を押してください）</p>
+          <p class="issue-memo-label" style="margin:0 0 6px 0">📝 気になるメモ（タップで選択→記録に含める）</p>
           <div id="m-pending-notes-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
         </div>
 
@@ -752,6 +784,32 @@
       <div class="modal-footer">
         <button class="btn-cancel" onclick="closeModal(null,'modal-bulk-medical')">キャンセル</button>
         <button class="btn-primary" onclick="saveBulkMedicalRecord()">まとめて保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-torisetsu" class="modal-overlay" onclick="closeModal(event,'modal-torisetsu')">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">📋 うちの子のトリセツを編集</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-torisetsu')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="field-age-note" style="margin-bottom:10px;">名前・年齢・犬猫種・避妊去勢・アレルギーはプロフィールとアンケートから自動で反映されます。</p>
+        <label class="field-label">ご飯の回数（回/日）</label>
+        <input type="text" id="t-food-times" class="field-input" placeholder="例: 2">
+        <label class="field-label">ご飯の時間</label>
+        <input type="text" id="t-food-time" class="field-input" placeholder="例: 朝7時・夜18時">
+        <label class="field-label">1回の量</label>
+        <input type="text" id="t-food-amount" class="field-input" placeholder="例: ドライ30g">
+        <label class="field-label">嬉しいこと・好きなこと</label>
+        <textarea id="t-likes" class="field-input" rows="3" placeholder="例: ボール遊び、なでなで、チキン"></textarea>
+        <label class="field-label">苦手なこと</label>
+        <textarea id="t-dislikes" class="field-input" rows="3" placeholder="例: 雷、子供、爪切り"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal(null,'modal-torisetsu')">キャンセル</button>
+        <button class="btn-primary" onclick="saveTorisetsu()">保存する</button>
       </div>
     </div>
   </div>

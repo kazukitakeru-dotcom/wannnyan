@@ -6,6 +6,7 @@ let currentPetId = null;
 let editMode = false;
 let surveyEditMode = false;
 let sortMode = 'name';
+let listSortDir = 'asc'; // 昇順/降順
 let familyOnlyMode = false; // 家族タグがある子のみ表示
 let reorderModeActive = false; // 並び替えモード（↑↓表示）
 
@@ -21,6 +22,7 @@ function saveManualOrder(ids) {
 }
 let deletePendingId = null;
 let tempPhotoData = null;
+let tempPendingNotePhoto = null;
 let breedSortMode = 'group';
 let breedCallback = null; // 犬種選択後のコールバック
 let currentFamilyTagFilter = null; // 家族タグフィルター
@@ -256,7 +258,23 @@ async function goToList() {
   editMode=false; currentPetId=null; tempPhotoData=null;
   showScreen('screen-list','back'); await renderList();
 }
-function openIssueFolder() { showScreen('screen-folder'); renderFolderScreen(); }
+function openIssueFolder() {
+  showScreen('screen-folder');
+  // folder-search のキーボードによる画面ズレ防止
+  const folderSearchEl = document.getElementById('folder-search');
+  if (folderSearchEl) {
+    folderSearchEl.setAttribute('readonly', 'readonly');
+    const removeReadonly = () => {
+      folderSearchEl.removeAttribute('readonly');
+      _suppressBackgroundScroll();
+    };
+    folderSearchEl.addEventListener('touchend', removeReadonly, { once: true });
+    folderSearchEl.addEventListener('click', removeReadonly, { once: true });
+    folderSearchEl.addEventListener('focus', _suppressBackgroundScroll);
+    folderSearchEl.addEventListener('blur', _suppressBackgroundScroll);
+  }
+  renderFolderScreen();
+}
 function closeIssueFolder() { showScreen('screen-list','back'); }
 function closeSurvey() { showScreen('screen-detail','back'); }
 
@@ -318,9 +336,15 @@ async function renderList() {
       return ai !== bi ? ai - bi : (a.name||'').localeCompare(b.name||'','ja');
     });
   } else {
-    sorted = [...filtered].sort((a,b)=>
-      sortMode==='name' ? (a.name||'').localeCompare(b.name||'','ja') : (b.updatedAt||0)-(a.updatedAt||0)
-    );
+    sorted = [...filtered].sort((a,b)=> {
+      if (sortMode === 'name') {
+        const cmp = (a.name||'').localeCompare(b.name||'','ja');
+        return listSortDir === 'asc' ? cmp : -cmp;
+      } else {
+        const cmp = (a.createdAt||0)-(b.createdAt||0);
+        return listSortDir === 'asc' ? cmp : -cmp;
+      }
+    });
   }
 
   // 家族タグチップバーを描画（削除）
@@ -375,6 +399,12 @@ async function setFamilyTagFilter(tag) {
 }
 async function filterList() { await renderList(); }
 async function sortList(mode) {
+  if (mode !== sortMode) {
+    // 別モードへ切り替えたら昇順にリセット
+    listSortDir = 'asc';
+    const dirBtn = document.getElementById('sort-dir-btn');
+    if (dirBtn) dirBtn.textContent = '昇順';
+  }
   sortMode = mode;
   if (mode !== 'manual') reorderModeActive = false;
   document.getElementById('sort-name-btn').classList.toggle('active', mode==='name');
@@ -382,7 +412,17 @@ async function sortList(mode) {
   document.getElementById('sort-manual-btn').classList.toggle('active', mode==='manual');
   if (mode !== 'manual') document.getElementById('sort-reorder-btn').classList.remove('active');
   document.querySelector('.sort-sub-row').classList.toggle('sort-manual-active', mode==='manual');
+  // 昇順降順ボタンは手動モード以外で有効
+  const dirBtn = document.getElementById('sort-dir-btn');
+  if (dirBtn) dirBtn.style.display = (mode === 'manual') ? 'none' : '';
   await renderList();
+}
+
+function toggleSortDir() {
+  listSortDir = listSortDir === 'asc' ? 'desc' : 'asc';
+  const dirBtn = document.getElementById('sort-dir-btn');
+  if (dirBtn) dirBtn.textContent = listSortDir === 'asc' ? '昇順' : '降順';
+  renderList();
 }
 
 function toggleReorderMode() {
@@ -396,6 +436,9 @@ function toggleReorderMode() {
     document.querySelector('.sort-sub-row').classList.add('sort-manual-active');
   }
   document.getElementById('sort-reorder-btn').classList.toggle('active', reorderModeActive);
+  // 手動モード時は昇順降順ボタン非表示
+  const dirBtn = document.getElementById('sort-dir-btn');
+  if (dirBtn) dirBtn.style.display = (sortMode === 'manual') ? 'none' : '';
   renderList();
 }
 
@@ -1511,6 +1554,7 @@ async function openHospitalRecords(petId) {
   renderMedicineListMaster();
   renderWalkTimer();
   renderPendingNotes(petId);
+  renderTorisetsu(petId);
   // カレンダーは画面遷移アニメーション完了後に描画
   setTimeout(() => renderCareCalendar(), 400);
 }
@@ -5065,13 +5109,33 @@ function addPendingNote(petId) {
   if (!input) return;
   const text = input.value.trim();
   if (!text) return;
+  const noteDate = (document.getElementById('pending-note-date')?.value || '').trim();
+  const noteTime = (document.getElementById('pending-note-time')?.value || '').trim();
+  const noteLocation = (document.getElementById('pending-note-location')?.value || '').trim();
   const all = loadPendingNotes();
   if (!all[petId]) all[petId] = [];
-  all[petId].push({ id: 'note_' + Date.now(), text, createdAt: new Date().toISOString() });
+  all[petId].push({
+    id: 'note_' + Date.now(),
+    text,
+    noteDate,
+    noteTime,
+    noteLocation,
+    photo: tempPendingNotePhoto || null,
+    createdAt: new Date().toISOString()
+  });
   savePendingNotes(all);
   input.value = '';
+  if (document.getElementById('pending-note-date')) document.getElementById('pending-note-date').value = '';
+  if (document.getElementById('pending-note-time')) document.getElementById('pending-note-time').value = '';
+  if (document.getElementById('pending-note-location')) document.getElementById('pending-note-location').value = '';
+  tempPendingNotePhoto = null;
+  // 写真プレビューリセット
+  const preview = document.getElementById('pending-note-photo-preview');
+  if (preview) { preview.src = ''; preview.classList.add('hidden'); }
+  const placeholder = document.getElementById('pending-note-photo-placeholder');
+  if (placeholder) placeholder.classList.remove('hidden');
   renderPendingNotes(petId);
-  showToast('メモをストックしました ✓');
+  showToast('メモをボードに追加しました ✓');
 }
 
 function deletePendingNote(petId, noteId) {
@@ -5087,15 +5151,26 @@ function renderPendingNotes(petId) {
   if (!container) return;
   const notes = getPetPendingNotes(petId);
   if (notes.length === 0) {
-    container.innerHTML = '<div class="memo-view memo-empty" style="font-size:12px">次回通院用のメモはありません</div>';
+    container.innerHTML = '<div class="memo-view memo-empty" style="font-size:12px">気になることをボードに貼っておきましょう</div>';
     return;
   }
-  container.innerHTML = notes.map(n => `
+  container.innerHTML = notes.map(n => {
+    const metaParts = [];
+    if (n.noteDate) metaParts.push('📅 ' + n.noteDate + (n.noteTime ? ' ' + n.noteTime : ''));
+    if (n.noteLocation) metaParts.push('📍 ' + escHtml(n.noteLocation));
+    const metaHtml = metaParts.length > 0 ? `<div class="pending-note-meta">${metaParts.join('　')}</div>` : '';
+    const photoHtml = n.photo ? `<img src="${n.photo}" class="pending-note-photo" onclick="window.open('${n.photo}','_blank')">` : '';
+    return `
     <div class="pending-note-item">
-      <span class="pending-note-text">${escHtml(n.text)}</span>
+      <div class="pending-note-body">
+        <span class="pending-note-text">${escHtml(n.text)}</span>
+        ${metaHtml}
+        ${photoHtml}
+      </div>
       <button class="pending-note-del" onclick="deletePendingNote('${petId}','${n.id}')" title="削除">🗑</button>
     </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 // 通院記録モーダルで未消化メモを表示（タップで選択・外すとストックに戻る）
@@ -5107,12 +5182,22 @@ function renderUndigestedNotesForModal(petId) {
   area.style.display = 'block';
   const list = document.getElementById('m-pending-notes-list');
   if (!list) return;
-  list.innerHTML = notes.map(n => `
-    <div class="pending-note-chip selected" id="pnchip-${n.id}">
-      <span onclick="togglePendingNoteSelect('${n.id}', document.getElementById('pnchip-${n.id}'))" style="flex:1;cursor:pointer;">${escHtml(n.text)}</span>
-      <button onclick="returnPendingNoteToStock('${petId}','${n.id}')" style="border:none;background:none;color:#c04040;font-size:11px;cursor:pointer;padding:0 2px;font-weight:700;" title="外してストックに戻す">外す</button>
+  list.innerHTML = notes.map(n => {
+    const metaParts = [];
+    if (n.noteDate) metaParts.push(n.noteDate + (n.noteTime ? ' ' + n.noteTime : ''));
+    if (n.noteLocation) metaParts.push('📍' + escHtml(n.noteLocation));
+    const metaHtml = metaParts.length > 0 ? `<span style="font-size:10px;color:var(--text-light);display:block;margin-top:2px;">${metaParts.join(' ')}</span>` : '';
+    const photoHtml = n.photo ? `<img src="${n.photo}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;margin-top:4px;cursor:pointer;" onclick="window.open('${n.photo}','_blank')">` : '';
+    return `
+    <div class="pending-note-chip" id="pnchip-${n.id}" onclick="togglePendingNoteSelect('${n.id}', this)" style="cursor:pointer;">
+      <span style="flex:1;">
+        ${escHtml(n.text)}
+        ${metaHtml}
+        ${photoHtml}
+      </span>
+      <button onclick="event.stopPropagation();returnPendingNoteToStock('${petId}','${n.id}')" style="border:none;background:none;color:#c04040;font-size:11px;cursor:pointer;padding:0 2px;font-weight:700;" title="外してストックに戻す">外す</button>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 // 通院記録モーダルから「外す」を押したときメモをストックに戻す（削除ではない）
@@ -5124,6 +5209,32 @@ function returnPendingNoteToStock(petId, noteId) {
     chip.style.display = 'none';
   }
   showToast('メモを外しました（ストックに残ります）');
+}
+
+function previewPendingNotePhoto(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  compressAndLoad(file, data => {
+    tempPendingNotePhoto = data;
+    const preview = document.getElementById('pending-note-photo-preview');
+    if (preview) { preview.src = data; preview.classList.remove('hidden'); }
+    const placeholder = document.getElementById('pending-note-photo-placeholder');
+    if (placeholder) placeholder.classList.add('hidden');
+    const removeBtn = document.getElementById('pending-note-photo-remove');
+    if (removeBtn) removeBtn.style.display = 'block';
+  });
+}
+
+function removePendingNotePhoto() {
+  tempPendingNotePhoto = null;
+  const preview = document.getElementById('pending-note-photo-preview');
+  if (preview) { preview.src = ''; preview.classList.add('hidden'); }
+  const placeholder = document.getElementById('pending-note-photo-placeholder');
+  if (placeholder) placeholder.classList.remove('hidden');
+  const removeBtn = document.getElementById('pending-note-photo-remove');
+  if (removeBtn) removeBtn.style.display = 'none';
+  const input = document.getElementById('pending-note-photo-input');
+  if (input) input.value = '';
 }
 
 function togglePendingNoteSelect(noteId, el) {
@@ -5144,6 +5255,118 @@ function digestSelectedPendingNotes(petId, currentNotes) {
   });
   savePendingNotes(all);
   return combined;
+}
+
+// ========== うちの子のトリセツ ==========
+async function renderTorisetsu(petId) {
+  const container = document.getElementById('torisetsu-content');
+  if (!container) return;
+  const data = await loadData();
+  const pet = (data[currentType] || []).find(p => p.id === petId);
+  if (!pet) return;
+  const t = pet.torisetsu || {};
+  const s = pet.survey || {};
+  const age = pet.birthday ? calcAge(pet.birthday) : (pet.age || '不明');
+  const allergies = (s.allergies && s.allergies.length > 0) ? s.allergies.join('、') : 'なし';
+  const neutered = s.neutered || '未記入';
+  const likes = t.likes || s.likes || '';
+  const dislikes = t.dislikes || s.dislikes || '';
+
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="torisetsu-row"><span class="torisetsu-label">名前</span><span class="torisetsu-val">${escHtml(pet.name)}</span></div>
+      <div class="torisetsu-row"><span class="torisetsu-label">年齢</span><span class="torisetsu-val">${escHtml(age)}</span></div>
+      <div class="torisetsu-row"><span class="torisetsu-label">性別</span><span class="torisetsu-val">${escHtml(pet.gender || '不明')}</span></div>
+      <div class="torisetsu-row"><span class="torisetsu-label">体重</span><span class="torisetsu-val">${pet.weight ? escHtml(pet.weight) + 'kg' : '不明'}</span></div>
+      <div class="torisetsu-row"><span class="torisetsu-label">${currentType === 'dog' ? '犬種' : '猫種'}</span><span class="torisetsu-val">${escHtml(pet.breed || '不明')}</span></div>
+      <div class="torisetsu-row"><span class="torisetsu-label">避妊・去勢</span><span class="torisetsu-val">${escHtml(neutered)}</span></div>
+      <div class="torisetsu-row"><span class="torisetsu-label">アレルギー</span><span class="torisetsu-val">${escHtml(allergies)}</span></div>
+      <div class="torisetsu-row torisetsu-row-col"><span class="torisetsu-label">ご飯</span><span class="torisetsu-val">${t.foodTimes ? escHtml(t.foodTimes) + '回/日' : '未設定'}${t.foodTime ? '　時間: ' + escHtml(t.foodTime) : ''}${t.foodAmount ? '　1回: ' + escHtml(t.foodAmount) : ''}</span></div>
+      <div class="torisetsu-row torisetsu-row-col"><span class="torisetsu-label">😊 嬉しいこと</span><span class="torisetsu-val">${escHtml(likes || '未記入')}</span></div>
+      <div class="torisetsu-row torisetsu-row-col"><span class="torisetsu-label">😰 苦手なこと</span><span class="torisetsu-val">${escHtml(dislikes || '未記入')}</span></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="openTorisetsuEdit()" style="flex:1;border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">✏️ 編集</button>
+      <button onclick="shareTorisetsu()" style="flex:1;border:none;background:var(--accent);color:white;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">📤 シェア</button>
+    </div>
+  `;
+}
+
+async function openTorisetsuEdit() {
+  const data = await loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  const t = pet.torisetsu || {};
+  const s = pet.survey || {};
+  document.getElementById('t-food-times').value = t.foodTimes || '';
+  document.getElementById('t-food-time').value = t.foodTime || '';
+  document.getElementById('t-food-amount').value = t.foodAmount || '';
+  document.getElementById('t-likes').value = t.likes || s.likes || '';
+  document.getElementById('t-dislikes').value = t.dislikes || s.dislikes || '';
+  document.getElementById('modal-torisetsu').classList.add('open');
+  _attachModalViewportFix('modal-torisetsu');
+}
+
+async function saveTorisetsu() {
+  const data = await loadData();
+  const pets = data[currentType] || [];
+  const idx = pets.findIndex(p => p.id === currentPetId);
+  if (idx === -1) return;
+  pets[idx].torisetsu = {
+    foodTimes: document.getElementById('t-food-times').value.trim(),
+    foodTime: document.getElementById('t-food-time').value.trim(),
+    foodAmount: document.getElementById('t-food-amount').value.trim(),
+    likes: document.getElementById('t-likes').value.trim(),
+    dislikes: document.getElementById('t-dislikes').value.trim(),
+  };
+  data[currentType] = pets;
+  await saveData(data);
+  closeModal(null, 'modal-torisetsu');
+  renderTorisetsu(currentPetId);
+  showToast('トリセツを保存しました ✓');
+}
+
+async function shareTorisetsu() {
+  const data = await loadData();
+  const pet = (data[currentType] || []).find(p => p.id === currentPetId);
+  if (!pet) return;
+  const t = pet.torisetsu || {};
+  const s = pet.survey || {};
+  const age = pet.birthday ? calcAge(pet.birthday) : (pet.age || '不明');
+  const allergies = (s.allergies && s.allergies.length > 0) ? s.allergies.join('、') : 'なし';
+  const neutered = s.neutered || '未記入';
+  const likes = t.likes || s.likes || '未記入';
+  const dislikes = t.dislikes || s.dislikes || '未記入';
+  const foodInfo = [
+    t.foodTimes ? t.foodTimes + '回/日' : null,
+    t.foodTime ? '時間: ' + t.foodTime : null,
+    t.foodAmount ? '1回: ' + t.foodAmount : null
+  ].filter(Boolean).join('　') || '未設定';
+
+  const text = `==== うちの子のトリセツ ====
+名前: ${pet.name}
+年齢: ${age}
+性別: ${pet.gender || '不明'}
+体重: ${pet.weight ? pet.weight + 'kg' : '不明'}
+${currentType === 'dog' ? '犬種' : '猫種'}: ${pet.breed || '不明'}
+避妊・去勢: ${neutered}
+アレルギー: ${allergies}
+ご飯: ${foodInfo}
+嬉しいこと: ${likes}
+苦手なこと: ${dislikes}
+========================`;
+
+  if (navigator.share) {
+    navigator.share({ text }).catch(() => {});
+    return;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('トリセツをコピーしました！LINEなどに貼り付けられます ✓');
+    }).catch(() => fallbackCopyTextToClipboard(text));
+  } else {
+    fallbackCopyTextToClipboard(text);
+  }
 }
 
 // ========== SW ==========

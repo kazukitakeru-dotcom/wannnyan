@@ -1330,3 +1330,19 @@ a, button {
 .pet-card-order-btns { display: flex; flex-direction: column; gap: 3px; padding: 0 4px; }
 .pet-card-order-btns button { border: none; background: rgba(200,132,74,0.12); color: var(--accent); border-radius: 6px; padding: 4px 8px; font-size: 13px; font-weight: 700; cursor: pointer; line-height: 1; }
 .pet-card-order-btns button:disabled { opacity: 0.25; cursor: default; }
+
+/* ========== 気になるメモ ========== */
+.pending-note-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; background: var(--white); border-radius: 10px; margin-bottom: 6px; box-shadow: 0 1px 6px rgba(44,36,24,0.07); }
+.pending-note-body { flex: 1; min-width: 0; }
+.pending-note-text { font-size: 13px; font-weight: 600; color: var(--text-dark); display: block; word-break: break-word; }
+.pending-note-meta { font-size: 11px; color: var(--text-light); margin-top: 3px; }
+.pending-note-photo { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; margin-top: 6px; display: block; cursor: pointer; }
+.pending-note-del { border: none; background: none; color: var(--text-light); font-size: 16px; cursor: pointer; padding: 0; flex-shrink: 0; line-height: 1; margin-top: 2px; }
+.pending-note-chip { display: flex; align-items: flex-start; gap: 6px; background: rgba(44,36,24,0.05); border: 1.5px solid rgba(44,36,24,0.1); border-radius: 8px; padding: 6px 8px; font-size: 12px; font-weight: 600; color: var(--text-dark); transition: background 0.15s, border-color 0.15s; }
+.pending-note-chip.selected { background: rgba(200,132,74,0.12); border-color: var(--accent); color: var(--text-dark); }
+
+/* ========== うちの子のトリセツ ========== */
+.torisetsu-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px dashed rgba(44,36,24,0.07); }
+.torisetsu-row-col { flex-direction: column; gap: 2px; }
+.torisetsu-label { font-size: 11px; font-weight: 700; color: var(--text-light); white-space: nowrap; min-width: 80px; }
+.torisetsu-val { font-size: 13px; font-weight: 600; color: var(--text-dark); word-break: break-word; }
