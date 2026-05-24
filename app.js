@@ -171,14 +171,43 @@ function applyTypeClass(type) {
   });
 }
 
-// iOS Safari の2本指スワイプ（ブラウザ戻るジェスチャー）対策
-// screen-hospital-records 表示中はブラウザのスワイプナビゲーションを抑制する
-document.addEventListener('touchstart', function(e) {
-  const hospital = document.getElementById('screen-hospital-records');
-  if (hospital && hospital.classList.contains('active') && e.touches.length >= 2) {
-    e.preventDefault();
-  }
-}, { passive: false });
+// iOS Safari のスワイプナビゲーション（左右ジェスチャー）抑制
+// 横方向のスワイプを検知して preventDefault することで
+// Safariが右外のDOMを引き込む動作を防ぐ
+(function() {
+  let _touchStartX = 0;
+  let _touchStartY = 0;
+
+  document.addEventListener('touchstart', function(e) {
+    // 2本指は常にキャンセル（ブラウザジェスチャー防止）
+    if (e.touches.length >= 2) {
+      e.preventDefault();
+      return;
+    }
+    _touchStartX = e.touches[0].clientX;
+    _touchStartY = e.touches[0].clientY;
+  }, { passive: false });
+
+  document.addEventListener('touchmove', function(e) {
+    if (e.touches.length >= 2) {
+      e.preventDefault();
+      return;
+    }
+    const dx = e.touches[0].clientX - _touchStartX;
+    const dy = e.touches[0].clientY - _touchStartY;
+
+    // 横方向が優勢なスワイプ = ブラウザのナビゲーションジェスチャーの可能性
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) {
+      // スクロール可能な縦スクロール要素の中でないことを確認
+      const target = e.target;
+      const scrollable = target.closest('.detail-content, .pet-list, .folder-content, .modal-box, .breed-list, .hospital-tab-content');
+      // 縦スクロール要素の外の横スワイプ = ブラウザジェスチャーなのでキャンセル
+      if (!scrollable) {
+        e.preventDefault();
+      }
+    }
+  }, { passive: false });
+})();
 
 async function selectType(type) {
   currentType = type;
@@ -4594,7 +4623,7 @@ function renderWalkTimer() {
     container.innerHTML = `
       ${envHtml}
       <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
-        <button class="walk-timer-start-btn" onclick="startWalkTimer('${petId}')" style="flex:1;">🐾 散歩スタート</button>
+        <button class="walk-timer-start-btn" onclick="startWalkTimer('${petId}')">🐾 散歩スタート</button>
         <button onclick="toggleWalkHistory()" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📋 散歩記録</button>
       </div>
       <div id="walk-history-panel" style="display:none;">${histHtml}</div>
