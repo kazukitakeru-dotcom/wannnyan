@@ -252,41 +252,40 @@ a, button {
   background: var(--white);
   border-bottom: 1px solid rgba(44,36,24,0.08);
   flex-shrink: 0;
-  padding: 6px 12px;
-  overflow-x: auto;
-  white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
-  gap: 8px;
-  justify-content: flex-start;
+  padding: 4px 6px;
+  gap: 2px;
 }
 .hospital-tabs::-webkit-scrollbar {
-  display: none; /* スクロールバー非表示 */
+  display: none;
 }
 .hospital-tab-btn {
-  flex: 1 0 auto;
+  flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
+  gap: 3px;
+  padding: 8px 2px;
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: 10px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: var(--font);
-  min-width: 64px;
 }
 .hospital-tab-btn .tab-icon {
-  font-size: 22px;
+  font-size: 20px;
   opacity: 0.6;
   transition: transform 0.2s;
 }
 .hospital-tab-btn .tab-label {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .hospital-tab-btn.active {
   background: rgba(200, 132, 74, 0.08);

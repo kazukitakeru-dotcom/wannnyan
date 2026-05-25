@@ -5343,6 +5343,119 @@ async function saveTorisetsu() {
   showToast('トリセツを保存しました ✓');
 }
 
+// トリセツ情報をカード画像として生成（写真＋テキストを1枚に焼き込み）
+async function generateTorisetsuImage(pet, lines) {
+  const SCALE = 2;
+  const W = 580;
+  const PAD = 32;
+  const PHOTO_R = 60;
+  const LINE_H = 46;
+  const HEADER_H = 60;
+  const PHOTO_SECTION = pet.photo ? PHOTO_R * 2 + 28 : 0;
+  const H = HEADER_H + PHOTO_SECTION + 16 + lines.length * LINE_H + 52;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W * SCALE;
+  canvas.height = H * SCALE;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(SCALE, SCALE);
+
+  // 背景
+  ctx.fillStyle = '#faf6f0';
+  ctx.fillRect(0, 0, W, H);
+
+  // ヘッダー帯
+  const accent = currentType === 'dog' ? '#c8844a' : '#7a9cc0';
+  ctx.fillStyle = accent;
+  roundRect(ctx, 0, 0, W, HEADER_H, 0);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold 22px 'Hiragino Sans','Noto Sans JP',sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('📋 うちの子のトリセツ', W / 2, HEADER_H / 2);
+
+  let y = HEADER_H + 16;
+
+  // ペット写真（丸く切り抜き）
+  if (pet.photo) {
+    try {
+      const img = new Image();
+      await new Promise(res => { img.onload = res; img.onerror = res; img.src = pet.photo; });
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(W / 2, y + PHOTO_R, PHOTO_R, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.clip();
+      ctx.drawImage(img, W / 2 - PHOTO_R, y, PHOTO_R * 2, PHOTO_R * 2);
+      ctx.restore();
+    } catch (e) {}
+    y += PHOTO_R * 2 + 20;
+  }
+
+  // 区切り線
+  ctx.strokeStyle = 'rgba(44,36,24,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
+  y += 14;
+
+  // 各行
+  for (const line of lines) {
+    // ラベル
+    ctx.fillStyle = '#9a8a78';
+    ctx.font = `600 12px 'Hiragino Sans','Noto Sans JP',sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(line.label, PAD, y + LINE_H * 0.35);
+
+    // 値（長い場合は省略）
+    ctx.fillStyle = '#2c2418';
+    ctx.font = `700 14px 'Hiragino Sans','Noto Sans JP',sans-serif`;
+    const valX = PAD + 130;
+    const maxValW = W - valX - PAD;
+    let val = line.value;
+    // テキストが長い場合は省略
+    while (val.length > 1 && ctx.measureText(val).width > maxValW) {
+      val = val.slice(0, -1);
+    }
+    if (val !== line.value) val += '…';
+    ctx.fillText(val, valX, y + LINE_H * 0.35);
+
+    // 下線
+    ctx.strokeStyle = 'rgba(44,36,24,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD, y + LINE_H * 0.75); ctx.lineTo(W - PAD, y + LINE_H * 0.75); ctx.stroke();
+
+    y += LINE_H;
+  }
+
+  // フッター
+  y += 10;
+  ctx.fillStyle = 'rgba(154,138,120,0.6)';
+  ctx.font = `11px 'Hiragino Sans','Noto Sans JP',sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('わんにゃんメモリー', W / 2, y + 14);
+
+  return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', 0.92));
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 async function shareTorisetsu() {
   const data = await loadData();
   const pet = (data[currentType] || []).find(p => p.id === currentPetId);
@@ -5360,7 +5473,20 @@ async function shareTorisetsu() {
     t.foodAmount ? '1回: ' + t.foodAmount : null
   ].filter(Boolean).join('　') || '未設定';
 
-  const text = `==== うちの子のトリセツ ====
+  const lines = [
+    { label: '名前', value: pet.name },
+    { label: '年齢', value: age },
+    { label: '性別', value: pet.gender || '不明' },
+    { label: '体重', value: pet.weight ? pet.weight + 'kg' : '不明' },
+    { label: currentType === 'dog' ? '犬種' : '猫種', value: pet.breed || '不明' },
+    { label: '避妊・去勢', value: neutered },
+    { label: 'アレルギー', value: allergies },
+    { label: 'ご飯', value: foodInfo },
+    { label: '嬉しいこと', value: likes },
+    { label: '苦手なこと', value: dislikes },
+  ];
+
+  const textFallback = `==== うちの子のトリセツ ====
 名前: ${pet.name}
 年齢: ${age}
 性別: ${pet.gender || '不明'}
@@ -5374,30 +5500,26 @@ ${currentType === 'dog' ? '犬種' : '猫種'}: ${pet.breed || '不明'}
 ========================`;
 
   if (navigator.share) {
-    // ペット写真があればファイルとして添付（iOSシェアシートに写真サムネイルが表示される）
-    if (pet.photo && navigator.canShare) {
-      try {
-        const res = await fetch(pet.photo);
-        const blob = await res.blob();
-        const ext = blob.type.includes('png') ? 'png' : 'jpg';
-        const file = new File([blob], `${pet.name}.${ext}`, { type: blob.type });
-        const shareWithFile = { files: [file], text };
-        if (navigator.canShare(shareWithFile)) {
-          navigator.share(shareWithFile).catch(() => {});
-          return;
-        }
-      } catch (e) {}
-    }
-    // 写真なし or 非対応端末はテキストのみ
-    navigator.share({ title: `${pet.name}のトリセツ`, text }).catch(() => {});
+    try {
+      // 写真＋テキストを1枚のカード画像に焼き込んで共有
+      const cardBlob = await generateTorisetsuImage(pet, lines);
+      const cardFile = new File([cardBlob], `${pet.name}のトリセツ.jpg`, { type: 'image/jpeg' });
+      const shareData = { files: [cardFile], title: `${pet.name}のトリセツ` };
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+        return;
+      }
+    } catch (e) {}
+    // カード生成失敗 or 非対応 → テキストのみ
+    navigator.share({ title: `${pet.name}のトリセツ`, text: textFallback }).catch(() => {});
     return;
   }
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
+    navigator.clipboard.writeText(textFallback).then(() => {
       showToast('トリセツをコピーしました！LINEなどに貼り付けられます ✓');
-    }).catch(() => fallbackCopyTextToClipboard(text));
+    }).catch(() => fallbackCopyTextToClipboard(textFallback));
   } else {
-    fallbackCopyTextToClipboard(text);
+    fallbackCopyTextToClipboard(textFallback);
   }
 }
 
