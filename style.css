@@ -256,26 +256,27 @@ a, button {
   overflow-x: auto;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
   gap: 8px;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 .hospital-tabs::-webkit-scrollbar {
   display: none; /* スクロールバー非表示 */
 }
 .hospital-tab-btn {
-  flex: 1 0 auto; /* 均等に広がるが、縮まない */
+  flex: 1 0 auto;
   border: none;
   background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 10px 18px;
+  padding: 10px 14px;
   cursor: pointer;
   border-radius: 12px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: var(--font);
-  min-width: 70px;
+  min-width: 64px;
 }
 .hospital-tab-btn .tab-icon {
   font-size: 22px;

@@ -5374,7 +5374,22 @@ ${currentType === 'dog' ? '犬種' : '猫種'}: ${pet.breed || '不明'}
 ========================`;
 
   if (navigator.share) {
-    navigator.share({ text }).catch(() => {});
+    // ペット写真があればファイルとして添付（iOSシェアシートに写真サムネイルが表示される）
+    if (pet.photo && navigator.canShare) {
+      try {
+        const res = await fetch(pet.photo);
+        const blob = await res.blob();
+        const ext = blob.type.includes('png') ? 'png' : 'jpg';
+        const file = new File([blob], `${pet.name}.${ext}`, { type: blob.type });
+        const shareWithFile = { files: [file], text };
+        if (navigator.canShare(shareWithFile)) {
+          navigator.share(shareWithFile).catch(() => {});
+          return;
+        }
+      } catch (e) {}
+    }
+    // 写真なし or 非対応端末はテキストのみ
+    navigator.share({ title: `${pet.name}のトリセツ`, text }).catch(() => {});
     return;
   }
   if (navigator.clipboard && navigator.clipboard.writeText) {
