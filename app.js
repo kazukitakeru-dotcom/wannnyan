@@ -5348,14 +5348,54 @@ async function generateTorisetsuImage(pet, lines) {
   const SCALE = 2;
   const W = 580;
   const PAD = 32;
-  const PHOTO_R = 60;
-  const LINE_H = 46;
-  const HEADER_H = 60;
+  const LABEL_W = 110;
+  const VAL_X = PAD + LABEL_W + 8;
+  const VAL_MAX_W = W - VAL_X - PAD;
+  const LINE_BASE_H = 14;  // フォントサイズ
+  const LINE_V_PAD = 14;   // 上下の余白
+  const PHOTO_R = 62;
+  const HEADER_H = 62;
   const PHOTO_SECTION = pet.photo ? PHOTO_R * 2 + 28 : 0;
-  const H = HEADER_H + PHOTO_SECTION + 16 + lines.length * LINE_H + 52;
+  const FOOTER_H = 36;
 
+  // ── フォント設定（measureText用に事前にcanvasを用意）──
+  const tmpCanvas = document.createElement('canvas');
+  const tmpCtx = tmpCanvas.getContext('2d');
+  tmpCtx.scale(SCALE, SCALE);
+  const FONT_LABEL = `600 12px 'Hiragino Sans','Noto Sans JP',sans-serif`;
+  const FONT_VAL   = `700 14px 'Hiragino Sans','Noto Sans JP',sans-serif`;
+
+  // ── 各行のテキストを折り返して事前に高さを計算 ──
+  function wrapLine(ctx, text, maxW, font) {
+    ctx.font = font;
+    const result = [];
+    let cur = '';
+    for (const ch of text) {
+      const test = cur + ch;
+      if (ctx.measureText(test).width > maxW && cur.length > 0) {
+        result.push(cur);
+        cur = ch;
+      } else {
+        cur = test;
+      }
+    }
+    if (cur) result.push(cur);
+    return result.length > 0 ? result : [''];
+  }
+
+  const wrappedLines = lines.map(l => ({
+    label: l.label,
+    wrapped: wrapLine(tmpCtx, l.value, VAL_MAX_W, FONT_VAL),
+  }));
+
+  // ── 総高さを計算 ──
+  const rowHeights = wrappedLines.map(l => l.wrapped.length * (LINE_BASE_H + 4) + LINE_V_PAD * 2);
+  const totalRowH = rowHeights.reduce((a, b) => a + b, 0);
+  const H = HEADER_H + PHOTO_SECTION + 16 + totalRowH + FOOTER_H;
+
+  // ── 本番キャンバス描画 ──
   const canvas = document.createElement('canvas');
-  canvas.width = W * SCALE;
+  canvas.width  = W * SCALE;
   canvas.height = H * SCALE;
   const ctx = canvas.getContext('2d');
   ctx.scale(SCALE, SCALE);
@@ -5367,8 +5407,7 @@ async function generateTorisetsuImage(pet, lines) {
   // ヘッダー帯
   const accent = currentType === 'dog' ? '#c8844a' : '#7a9cc0';
   ctx.fillStyle = accent;
-  roundRect(ctx, 0, 0, W, HEADER_H, 0);
-  ctx.fill();
+  ctx.fillRect(0, 0, W, HEADER_H);
   ctx.fillStyle = '#ffffff';
   ctx.font = `bold 22px 'Hiragino Sans','Noto Sans JP',sans-serif`;
   ctx.textAlign = 'center';
@@ -5385,7 +5424,6 @@ async function generateTorisetsuImage(pet, lines) {
       ctx.save();
       ctx.beginPath();
       ctx.arc(W / 2, y + PHOTO_R, PHOTO_R, 0, Math.PI * 2);
-      ctx.closePath();
       ctx.strokeStyle = accent;
       ctx.lineWidth = 4;
       ctx.stroke();
@@ -5397,49 +5435,52 @@ async function generateTorisetsuImage(pet, lines) {
   }
 
   // 区切り線
-  ctx.strokeStyle = 'rgba(44,36,24,0.1)';
+  ctx.strokeStyle = 'rgba(44,36,24,0.12)';
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
-  y += 14;
+  y += 0;
 
-  // 各行
-  for (const line of lines) {
-    // ラベル
+  // 各行（折り返し対応）
+  for (let i = 0; i < wrappedLines.length; i++) {
+    const row = wrappedLines[i];
+    const rH  = rowHeights[i];
+    const midY = y + rH / 2;
+
+    // ラベル（行の垂直中央）
     ctx.fillStyle = '#9a8a78';
-    ctx.font = `600 12px 'Hiragino Sans','Noto Sans JP',sans-serif`;
+    ctx.font = FONT_LABEL;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(line.label, PAD, y + LINE_H * 0.35);
+    ctx.fillText(row.label, PAD, midY);
 
-    // 値（長い場合は省略）
+    // 値（折り返した各行を上から描画）
     ctx.fillStyle = '#2c2418';
-    ctx.font = `700 14px 'Hiragino Sans','Noto Sans JP',sans-serif`;
-    const valX = PAD + 130;
-    const maxValW = W - valX - PAD;
-    let val = line.value;
-    // テキストが長い場合は省略
-    while (val.length > 1 && ctx.measureText(val).width > maxValW) {
-      val = val.slice(0, -1);
+    ctx.font = FONT_VAL;
+    const valLineH = LINE_BASE_H + 4;
+    const totalValH = row.wrapped.length * valLineH;
+    const valStartY = midY - totalValH / 2 + valLineH / 2;
+    row.wrapped.forEach((wl, wi) => {
+      ctx.fillText(wl, VAL_X, valStartY + wi * valLineH);
+    });
+
+    y += rH;
+
+    // 下線（最終行以外）
+    if (i < wrappedLines.length - 1) {
+      ctx.strokeStyle = 'rgba(44,36,24,0.07)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
     }
-    if (val !== line.value) val += '…';
-    ctx.fillText(val, valX, y + LINE_H * 0.35);
-
-    // 下線
-    ctx.strokeStyle = 'rgba(44,36,24,0.06)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(PAD, y + LINE_H * 0.75); ctx.lineTo(W - PAD, y + LINE_H * 0.75); ctx.stroke();
-
-    y += LINE_H;
   }
 
   // フッター
-  y += 10;
-  ctx.fillStyle = 'rgba(154,138,120,0.6)';
+  ctx.fillStyle = 'rgba(154,138,120,0.55)';
   ctx.font = `11px 'Hiragino Sans','Noto Sans JP',sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText('わんにゃんメモリー', W / 2, y + 14);
+  ctx.textBaseline = 'middle';
+  ctx.fillText('わんにゃんメモリー', W / 2, y + FOOTER_H / 2);
 
-  return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', 0.92));
+  return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', 0.93));
 }
 
 function roundRect(ctx, x, y, w, h, r) {
