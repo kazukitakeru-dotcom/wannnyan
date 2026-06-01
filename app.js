@@ -4706,10 +4706,12 @@ function startWalkTimer(petId, extraPetIds) {
   // extraPetIds: 一緒に散歩する他の子のID配列（省略時は保存済みグループを使用）
   const group = extraPetIds || loadWalkGroup(petId) || [petId];
   const petIds = [...new Set([petId, ...group])];
+  const startDate = new Date();
   const state = {
     petId,          // メイン（この画面の子）
     petIds,         // 一緒に散歩する全員
-    startTs: Date.now()
+    startTs: Date.now(),
+    startHour: startDate.getHours() // 開始時刻（時）
   };
   saveWalkTimerState(state);
   saveWalkGroup(petId, petIds);
@@ -4722,25 +4724,45 @@ async function stopWalkTimer() {
   if (!state) return;
   clearInterval(walkTimerInterval);
   walkTimerInterval = null;
+  const now = new Date();
   const elapsed = Math.floor((Date.now() - state.startTs) / 1000);
   const mins = Math.floor(elapsed / 60);
   const secs = elapsed % 60;
 
+  // 時間帯ラベルを生成（開始時刻をもとに）
+  const startHour = state.startHour !== undefined ? state.startHour : now.getHours();
+  let timeOfDay;
+  if (startHour >= 5 && startHour < 10) timeOfDay = '朝';
+  else if (startHour >= 10 && startHour < 14) timeOfDay = '昼';
+  else if (startHour >= 14 && startHour < 17) timeOfDay = '夕方前';
+  else if (startHour >= 17 && startHour < 20) timeOfDay = '夕方';
+  else if (startHour >= 20 && startHour < 24) timeOfDay = '夜';
+  else timeOfDay = '深夜';
+
   // state.petIds 全員に散歩記録を保存（複数頭対応）
   const petIds = state.petIds || [state.petId];
-  const data = await loadData();
-  const dateStr = new Date().toISOString().split('T')[0];
-  ['dog','cat'].forEach(type => {
-    (data[type] || []).forEach((pet, idx) => {
-      if (petIds.includes(`${type}-${pet.id}`) || petIds.includes(pet.id)) {
-        const p = ensurePetHospitalFields(pet);
-        if (!p.quickCares[dateStr]) p.quickCares[dateStr] = {};
-        p.quickCares[dateStr].walkMinutes = (p.quickCares[dateStr].walkMinutes || 0) + mins;
-        data[type][idx] = p;
-      }
+  try {
+    const data = await loadData();
+    const dateStr = now.toISOString().split('T')[0];
+    ['dog','cat'].forEach(type => {
+      (data[type] || []).forEach((pet, idx) => {
+        if (petIds.includes(`${type}-${pet.id}`) || petIds.includes(pet.id)) {
+          const p = ensurePetHospitalFields(pet);
+          if (!p.quickCares[dateStr]) p.quickCares[dateStr] = {};
+          p.quickCares[dateStr].walkMinutes = (p.quickCares[dateStr].walkMinutes || 0) + mins;
+          // 時間帯リストに追記（同日に複数回散歩した場合も残す）
+          if (!p.quickCares[dateStr].walkTimeOfDay) p.quickCares[dateStr].walkTimeOfDay = [];
+          if (!p.quickCares[dateStr].walkTimeOfDay.includes(timeOfDay)) {
+            p.quickCares[dateStr].walkTimeOfDay.push(timeOfDay);
+          }
+          data[type][idx] = p;
+        }
+      });
     });
-  });
-  await saveData(data);
+    await saveData(data);
+  } catch(e) {
+    console.error('散歩記録の保存に失敗:', e);
+  }
 
   saveWalkTimerState(null);
   renderWalkTimer();
@@ -4778,6 +4800,19 @@ function tickWalkTimer() {
 function onVisibilityChange() {
   if (document.hidden) {
     clearInterval(walkTimerInterval);
+    walkTimerInterval = null;
+    // バックグラウンド移行時にタイマー状態が存在すれば中間保存（途中経過を保護）
+    const state = loadWalkTimerState();
+    if (state) {
+      const elapsed = Math.floor((Date.now() - state.startTs) / 1000);
+      const mins = Math.floor(elapsed / 60);
+      if (mins > 0) {
+        // タイマーは継続中のまま（startTsは変えない）、中断フラグだけ立てる
+        // ※バックグラウンドで終了判定された場合に備えて現在分数をstateに保存
+        const backupState = { ...state, backgroundMins: mins };
+        saveWalkTimerState(backupState);
+      }
+    }
   } else {
     const state = loadWalkTimerState();
     if (state) tickWalkTimer();
@@ -4819,7 +4854,7 @@ function renderWalkTimer() {
     const allEntries = [];
     Object.entries(pet.quickCares || {}).forEach(([dateStr, care]) => {
       if (care.walkMinutes !== undefined && care.walkMinutes > 0) {
-        allEntries.push({ dateStr, mins: care.walkMinutes });
+        allEntries.push({ dateStr, mins: care.walkMinutes, timeOfDay: care.walkTimeOfDay || [] });
       }
     });
     allEntries.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
@@ -4834,11 +4869,12 @@ function renderWalkTimer() {
         <div style="font-size:12px;color:var(--text-light);padding:4px 0;">散歩記録はありません</div>
       </div>`;
 
-    const rows = allEntries.map(({dateStr, mins}) => {
+    const rows = allEntries.map(({dateStr, mins, timeOfDay}) => {
       const d = new Date(dateStr + 'T00:00:00');
       const label = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+      const timeLabel = timeOfDay && timeOfDay.length > 0 ? `<span style="font-size:10px;color:var(--text-light);margin-left:4px;">(${timeOfDay.join('・')})</span>` : '';
       return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;padding:5px 0;border-bottom:1px solid rgba(44,36,24,0.05);">
-        <span>${label}</span>
+        <span>${label}${timeLabel}</span>
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="color:var(--accent)">🐾 ${mins}分</span>
           <button onclick="openWalkRecordEditModal('${dateStr}',${mins})" style="border:none;background:rgba(200,132,74,0.12);color:var(--accent);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;">✏️</button>
