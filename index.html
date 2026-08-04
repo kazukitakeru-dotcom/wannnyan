@@ -239,6 +239,14 @@
               </span>
             </label>
           </div>
+          <div class="obs-pick-head">
+            <span class="obs-pick-title">書き出す子</span>
+            <span class="obs-pick-actions">
+              <button type="button" class="obs-pick-link" onclick="obsPickAll(true)">全部</button>
+              <button type="button" class="obs-pick-link" onclick="obsPickAll(false)">解除</button>
+            </span>
+          </div>
+          <div class="obs-pick-list" id="obs-pick-list"></div>
           <label class="obs-photo-opt">
             <input type="checkbox" id="obs-photos">
             <span>写真も書き出す（ファイルが大きくなります）</span>

@@ -251,6 +251,33 @@ textarea.field-input { resize: vertical; min-height: 76px; line-height: 1.6; }
 .obs-format-body { display: flex; flex-direction: column; gap: 2px; }
 .obs-format-name { font-size: 14px; font-weight: 700; }
 .obs-format-note { font-size: 12px; color: var(--text-light); line-height: 1.5; }
+.obs-pick-head {
+  display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px;
+}
+.obs-pick-title { font-size: 13px; font-weight: 700; }
+.obs-pick-actions { display: flex; gap: 10px; }
+.obs-pick-link {
+  border: none; background: none; padding: 0; cursor: pointer;
+  font-size: 12px; font-weight: 700; color: var(--accent); font-family: var(--font);
+}
+.obs-pick-list {
+  max-height: 168px; overflow-y: auto; margin-bottom: 12px;
+  border: 1.5px solid rgba(44,36,24,0.12); border-radius: 12px;
+  background: rgba(255,255,255,0.5); padding: 4px;
+}
+.obs-pick-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.obs-pick-item:active { background: rgba(44,36,24,0.05); }
+.obs-pick-item input { accent-color: var(--accent); flex-shrink: 0; }
+.obs-pick-name { flex: 1; font-weight: 600; }
+.obs-pick-type {
+  font-size: 11px; font-weight: 700; color: var(--text-light);
+  background: rgba(44,36,24,0.06); border-radius: 20px; padding: 2px 8px;
+}
+.obs-pick-empty { font-size: 13px; color: var(--text-light); padding: 12px 8px; text-align: center; }
+
 .obs-photo-opt {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; color: var(--text-light); margin-bottom: 12px; cursor: pointer;

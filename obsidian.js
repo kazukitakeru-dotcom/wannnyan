@@ -570,6 +570,55 @@ function obsIndexNote(entries, hospitals, opts) {
   return L.join('\n');
 }
 
+// ========== 書き出す子の選択 ==========
+// 「データの引き継ぎ」を開いたときに一覧を作る
+async function renderObsPickList() {
+  const box = document.getElementById('obs-pick-list');
+  if (!box) return;
+  const data = await loadData();
+  const entries = [];
+  ['dog', 'cat'].forEach(type => (data[type] || []).forEach(pet => entries.push({ pet, type })));
+
+  if (!entries.length) {
+    box.innerHTML = '<div class="obs-pick-empty">登録されている子がいません</div>';
+    return;
+  }
+  // 既存のチェック状態は保つ（初回は全選択）
+  const prev = {};
+  box.querySelectorAll('input[data-pet-id]').forEach(i => { prev[i.dataset.petId] = i.checked; });
+
+  box.innerHTML = entries.map(e => {
+    const id = escHtml(String(e.pet.id));
+    const on = prev[String(e.pet.id)] !== false;
+    return `<label class="obs-pick-item">
+      <input type="checkbox" data-pet-id="${id}" data-pet-type="${e.type}" ${on ? 'checked' : ''}>
+      <span class="obs-pick-name">${escHtml(e.pet.name || '無題')}</span>
+      <span class="obs-pick-type">${OBS_TYPE_LABEL[e.type]}</span>
+    </label>`;
+  }).join('');
+}
+
+// 「データの引き継ぎ」を開いたら一覧を作り直す（app.js は無改造のままフックする）
+(function hookTransferModal() {
+  const orig = window.openTransferModal;
+  if (typeof orig !== 'function') return;
+  window.openTransferModal = function () {
+    orig.apply(this, arguments);
+    renderObsPickList();
+    if (typeof updateSyncUI === 'function') updateSyncUI();
+  };
+})();
+
+function obsPickAll(on) {
+  document.querySelectorAll('#obs-pick-list input[data-pet-id]').forEach(i => { i.checked = on; });
+}
+
+function obsSelectedIds() {
+  const boxes = document.querySelectorAll('#obs-pick-list input[data-pet-id]');
+  if (!boxes.length) return null; // 一覧が無ければ絞り込まない
+  return new Set([...boxes].filter(i => i.checked).map(i => i.dataset.petId));
+}
+
 // ========== 書き出し本体 ==========
 async function exportObsidian() {
   const fmtEl = document.querySelector('input[name="obs-format"]:checked');
@@ -581,14 +630,32 @@ async function exportObsidian() {
   const pendingNotes = (typeof loadPendingNotes === 'function') ? loadPendingNotes() : {};
 
   // 一覧を作りつつ、同名のペットにはファイル名で種別を足して衝突を避ける
+  const picked = obsSelectedIds();
   const flat = [];
   ['dog', 'cat'].forEach(type => {
-    (data[type] || []).forEach(pet => flat.push({ pet, type }));
+    (data[type] || []).forEach(pet => {
+      if (picked && !picked.has(String(pet.id))) return;
+      flat.push({ pet, type });
+    });
   });
 
   if (!flat.length) {
-    alert('書き出せるデータがありません。');
+    alert(picked && picked.size === 0
+      ? '書き出す子が選ばれていません。'
+      : '書き出せるデータがありません。');
     return;
+  }
+
+  // 一部の子だけ選んだときは、その子が通った病院だけに絞る。
+  // 全員書き出すときは、まだ通っていない病院も情報として残す。
+  const totalPets = (data.dog || []).length + (data.cat || []).length;
+  let outHospitals = hospitals;
+  if (flat.length < totalPets) {
+    const usedHospitalIds = new Set();
+    flat.forEach(e => (e.pet.medicalRecords || []).forEach(r => {
+      if (r.hospitalId) usedHospitalIds.add(r.hospitalId);
+    }));
+    outHospitals = hospitals.filter(h => usedHospitalIds.has(h.id));
   }
 
   // 同名がいたら「名前（犬）」、種別まで同じならさらに連番を足す
@@ -605,7 +672,7 @@ async function exportObsidian() {
   });
 
   const ctx = {
-    hospitals,
+    hospitals: outHospitals,
     pendingNotes,
     includePhotos,
     linkHospitals: format !== 'single',
@@ -625,15 +692,15 @@ async function exportObsidian() {
     const demote = md => md.replace(/^(#{1,5}) /gm, '#$1 ');
 
     const parts = [];
-    parts.push(obsIndexNote(flat, hospitals, { link: false }));
+    parts.push(obsIndexNote(flat, outHospitals, { link: false }));
     flat.forEach(e => {
       parts.push('\n---\n');
       parts.push(stripFm(obsPetNote(e.pet, e.type, { ...ctx, includePhotos: false, headingName: e.fileName })));
     });
-    if (hospitals.length) {
+    if (outHospitals.length) {
       parts.push('\n---\n');
       parts.push('# 動物病院\n');
-      hospitals.forEach(h => parts.push(demote(stripFm(obsHospitalNote(h)))));
+      outHospitals.forEach(h => parts.push(demote(stripFm(obsHospitalNote(h)))));
     }
     const blob = new Blob([parts.join('\n')], { type: 'text/markdown;charset=utf-8' });
     await shareOrDownload(blob, `わんにゃんメモリー_${stamp}.md`);
@@ -642,7 +709,7 @@ async function exportObsidian() {
 
   // ---- ZIP（1匹1ノート、必要ならデイリーノートも） ----
   const files = [];
-  files.push({ name: 'わんにゃんメモリー.md', data: _u8(obsIndexNote(flat, hospitals)) });
+  files.push({ name: 'わんにゃんメモリー.md', data: _u8(obsIndexNote(flat, outHospitals)) });
 
   flat.forEach(e => {
     files.push({ name: `ペット/${e.fileName}.md`, data: _u8(obsPetNote(e.pet, e.type, ctx)) });
@@ -652,7 +719,7 @@ async function exportObsidian() {
     }
   });
 
-  hospitals.forEach(h => {
+  outHospitals.forEach(h => {
     if (!h || !h.name) return;
     files.push({ name: `病院/${obsFileName(h.name)}.md`, data: _u8(obsHospitalNote(h)) });
   });
