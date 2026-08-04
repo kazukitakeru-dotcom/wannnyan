@@ -298,6 +298,8 @@ async function _push(state) {
 
   window.saveData = async function (data) {
     await origSaveData(data);
+    // 未ログイン時は同期を一切しない＝導入前とまったく同じ挙動にする
+    if (!sbIsLoggedIn()) return;
     try {
       const state = await _loadSyncState();
       const now = Date.now();
@@ -314,6 +316,7 @@ async function _push(state) {
 
   window.saveHospitals = async function (list) {
     await origSaveHospitals(list);
+    if (!sbIsLoggedIn()) return;
     try {
       const state = await _loadSyncState();
       const now = Date.now();
