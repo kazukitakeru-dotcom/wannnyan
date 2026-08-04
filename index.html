@@ -192,6 +192,15 @@
       </div>
       <div class="modal-body">
         <div class="transfer-section">
+          <h4 class="transfer-title">☁️ 複数端末で同期</h4>
+          <p class="transfer-desc">ログインすると、この端末の記録が他の端末とも同じになります。</p>
+          <div id="sync-status" class="sync-status">…</div>
+          <button class="btn-transfer sync" id="sync-login-btn" onclick="openSyncLogin()">ログイン / 新規登録</button>
+          <button class="btn-transfer sync hidden" id="sync-now-btn" onclick="syncNow({toast:true})">今すぐ同期</button>
+          <button class="btn-transfer subtle hidden" id="sync-logout-btn" onclick="doSyncLogout()">ログアウト</button>
+        </div>
+        <div class="transfer-divider"></div>
+        <div class="transfer-section">
           <h4 class="transfer-title">📤 エクスポート（バックアップ）</h4>
           <p class="transfer-desc">全データをJSONファイルとして保存します。<br>機種変更前にこちらを実行してください。</p>
           <button class="btn-transfer export" onclick="exportData()">データをエクスポート</button>
@@ -205,11 +214,64 @@
         </div>
         <div class="transfer-divider"></div>
         <div class="transfer-section">
+          <h4 class="transfer-title">🗂 Obsidian用に書き出し</h4>
+          <p class="transfer-desc">記録をMarkdownで書き出します。<br>あとから見返したり、AIに読ませたりする用です。</p>
+          <div class="obs-format-list">
+            <label class="obs-format-opt">
+              <input type="radio" name="obs-format" value="per-pet" checked>
+              <span class="obs-format-body">
+                <span class="obs-format-name">1匹＝1ノート</span>
+                <span class="obs-format-note">ペットごとに1ファイル。病院ノートと索引つきのZIP。</span>
+              </span>
+            </label>
+            <label class="obs-format-opt">
+              <input type="radio" name="obs-format" value="per-pet-daily">
+              <span class="obs-format-body">
+                <span class="obs-format-name">1匹＝1ノート ＋ 日付ノート</span>
+                <span class="obs-format-note">上に加えて、通院・体重・ケアを日付ごとにも書き出す。</span>
+              </span>
+            </label>
+            <label class="obs-format-opt">
+              <input type="radio" name="obs-format" value="single">
+              <span class="obs-format-body">
+                <span class="obs-format-name">全部まとめて1ファイル</span>
+                <span class="obs-format-note">.md 1枚。AIにそのまま貼るならこれが手軽。</span>
+              </span>
+            </label>
+          </div>
+          <label class="obs-photo-opt">
+            <input type="checkbox" id="obs-photos">
+            <span>写真も書き出す（ファイルが大きくなります）</span>
+          </label>
+          <button class="btn-transfer export" onclick="exportObsidian()">Markdownで書き出す</button>
+        </div>
+        <div class="transfer-divider"></div>
+        <div class="transfer-section">
           <h4 class="transfer-title" style="color:#c04040">⚠️ データをリセット</h4>
           <p class="transfer-desc">全データを削除します。この操作は取り消せません。</p>
           <button class="btn-transfer danger" onclick="confirmReset()">全データを削除</button>
         </div>
         <div style="height:20px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-sync-login" class="modal-overlay" onclick="closeModal(event,'modal-sync-login')">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">☁️ 同期のログイン</h3>
+        <button class="modal-close" onclick="closeModal(null,'modal-sync-login')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="transfer-desc">初めての端末では「新規登録」、2台目以降は同じメールアドレスとパスワードで「ログイン」してください。</p>
+        <label class="field-label">メールアドレス</label>
+        <input type="email" id="sync-email" class="field-input" autocomplete="username" inputmode="email" placeholder="you@example.com">
+        <label class="field-label" style="margin-top:10px">パスワード</label>
+        <input type="password" id="sync-password" class="field-input" autocomplete="current-password" placeholder="8文字以上">
+        <div id="sync-login-msg" class="sync-login-msg"></div>
+        <button class="btn-transfer sync" style="margin-top:12px" onclick="submitSyncLogin('signin')">ログイン</button>
+        <button class="btn-transfer subtle" style="margin-top:8px" onclick="submitSyncLogin('signup')">新規登録</button>
+        <div style="height:12px"></div>
       </div>
     </div>
   </div>
@@ -816,5 +878,7 @@
 
   <script src="breeds.js"></script>
   <script src="app.js"></script>
+  <script src="obsidian.js"></script>
+  <script src="sync.js"></script>
 </body>
 </html>

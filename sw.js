@@ -1,9 +1,11 @@
-const CACHE_NAME = 'wannyan-v29';
+const CACHE_NAME = 'wannyan-v31';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './obsidian.js',
+  './sync.js',
   './manifest.json',
 ];
 
