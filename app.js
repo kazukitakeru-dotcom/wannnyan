@@ -1688,11 +1688,12 @@ async function renderCareCalendar() {
     const hasMedicine = Object.keys(medicineLogs).length > 0;
 
     let icons = '';
-    if (quickCares.nail) icons += '<svg class="ico ico-nail" style="width:12px;height:12px"><use href="#i-nail"/></svg>';
-    if (quickCares.tooth) icons += '<svg class="ico ico-tooth" style="width:12px;height:12px"><use href="#i-tooth"/></svg>';
-    if (quickCares.flea) icons += '<svg class="ico ico-flea" style="width:12px;height:12px"><use href="#i-flea"/></svg>';
-    if (quickCares.groom) icons += '<svg class="ico ico-groom" style="width:12px;height:12px"><use href="#i-groom"/></svg>';
-    if (hasMedicine) icons += '<span style="font-size:10px;">💊</span>';
+    const calIco = k => `<svg class="ico ico-cal ico-${k}"><use href="#i-${k}"/></svg>`;
+    if (quickCares.nail) icons += calIco('nail');
+    if (quickCares.tooth) icons += calIco('tooth');
+    if (quickCares.flea) icons += calIco('flea');
+    if (quickCares.groom) icons += calIco('groom');
+    if (hasMedicine) icons += calIco('med');
 
     const isToday = (dateStr === tStr);
     const bg = isToday ? 'background:rgba(200,132,74,0.1); border-radius:6px;' : '';
