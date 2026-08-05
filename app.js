@@ -134,7 +134,7 @@ const ISSUES = {
   ],
   cat: [
     {key:'cry',    icon:'😿', label:'鳴き'},
-    {key:'dental', icon:'🪥', label:'歯磨き'},
+    {key:'dental', icon:'<svg class="ico ico-tooth"><use href="#i-tooth"/></svg>', label:'歯磨き'},
     {key:'toilet', icon:'<svg class="ico"><use href="#i-toilet"/></svg>', label:'トイレ'},
     {key:'free',   icon:'📝', label:'自由記入'},
   ],
@@ -1688,10 +1688,10 @@ async function renderCareCalendar() {
     const hasMedicine = Object.keys(medicineLogs).length > 0;
 
     let icons = '';
-    if (quickCares.nail) icons += '<svg class="ico" style="width:10px;height:10px"><use href="#i-nail"/></svg>';
-    if (quickCares.tooth) icons += '<span style="font-size:10px;">🪥</span>';
-    if (quickCares.flea) icons += '<span style="font-size:10px;">🛡️</span>';
-    if (quickCares.groom) icons += '<span style="font-size:10px;">✂️</span>';
+    if (quickCares.nail) icons += '<svg class="ico ico-nail" style="width:12px;height:12px"><use href="#i-nail"/></svg>';
+    if (quickCares.tooth) icons += '<svg class="ico ico-tooth" style="width:12px;height:12px"><use href="#i-tooth"/></svg>';
+    if (quickCares.flea) icons += '<svg class="ico ico-flea" style="width:12px;height:12px"><use href="#i-flea"/></svg>';
+    if (quickCares.groom) icons += '<svg class="ico ico-groom" style="width:12px;height:12px"><use href="#i-groom"/></svg>';
     if (hasMedicine) icons += '<span style="font-size:10px;">💊</span>';
 
     const isToday = (dateStr === tStr);
@@ -2543,10 +2543,10 @@ async function renderMedicalTimeline() {
       
       let caresList = [];
       if (rec.cares) {
-        if (rec.cares.nail) caresList.push('<svg class="ico"><use href="#i-nail"/></svg>爪切り');
-        if (rec.cares.tooth) caresList.push('🪥歯磨き');
-        if (rec.cares.flea) caresList.push('🛡️ノミダニ');
-        if (rec.cares.groom) caresList.push('✂️トリミング');
+        if (rec.cares.nail) caresList.push('<svg class="ico ico-nail"><use href="#i-nail"/></svg>爪切り');
+        if (rec.cares.tooth) caresList.push('<svg class="ico ico-tooth"><use href="#i-tooth"/></svg>歯磨き');
+        if (rec.cares.flea) caresList.push('<svg class="ico ico-flea"><use href="#i-flea"/></svg>ノミダニ');
+        if (rec.cares.groom) caresList.push('<svg class="ico ico-groom"><use href="#i-groom"/></svg>トリミング');
       }
       const caresHtml = caresList.length > 0 ? `<div class="timeline-item-meta" style="color:var(--text-dark); font-weight:700;">日常ケア：${caresList.join('、')}</div>` : '';
       const weightHtml = rec.weight ? `<div class="timeline-item-meta" style="color:var(--text-dark); font-weight:700;">体重：${rec.weight} kg</div>` : '';
@@ -2867,19 +2867,19 @@ async function renderBulkPetsList(allPets) {
         <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
             <input type="checkbox" id="bulk-ind-nail-${key}"
-              ${document.getElementById('bulk-m-care-nail')?.checked?'checked':''}> <svg class="ico"><use href="#i-nail"/></svg> 爪切り
+              ${document.getElementById('bulk-m-care-nail')?.checked?'checked':''}> <svg class="ico ico-nail"><use href="#i-nail"/></svg> 爪切り
           </label>
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
             <input type="checkbox" id="bulk-ind-tooth-${key}"
-              ${document.getElementById('bulk-m-care-tooth')?.checked?'checked':''}> 🪥 歯磨き
+              ${document.getElementById('bulk-m-care-tooth')?.checked?'checked':''}> <svg class="ico ico-tooth"><use href="#i-tooth"/></svg> 歯磨き
           </label>
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
             <input type="checkbox" id="bulk-ind-flea-${key}"
-              ${document.getElementById('bulk-m-care-flea')?.checked?'checked':''}> 💊 ノミダニ
+              ${document.getElementById('bulk-m-care-flea')?.checked?'checked':''}> <svg class="ico ico-flea"><use href="#i-flea"/></svg> ノミダニ
           </label>
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
             <input type="checkbox" id="bulk-ind-groom-${key}"
-              ${document.getElementById('bulk-m-care-groom')?.checked?'checked':''}> ✂️ トリミング
+              ${document.getElementById('bulk-m-care-groom')?.checked?'checked':''}> <svg class="ico ico-groom"><use href="#i-groom"/></svg> トリミング
           </label>
         </div>
 

@@ -20,8 +20,19 @@
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-    <!-- 26px で潰れないことを実測して決めた形。要素を増やさないこと -->
+    <!-- 26px と、カレンダーの 12px で潰れないことを実測して決めた形。要素を増やさないこと -->
     <g id="i-nail">
+      <ellipse cx="6.6" cy="9.4" rx="2" ry="2.6"/><ellipse cx="11.4" cy="7.4" rx="2.1" ry="2.7"/><ellipse cx="16.2" cy="9.4" rx="2" ry="2.6"/>
+      <path d="M11.4 12.6c3.4 0 5.9 2.5 5.9 4.9 0 2-1.6 3.3-3.5 3.3-1 0-1.7-.3-2.4-.3s-1.4.3-2.4.3c-1.9 0-3.5-1.3-3.5-3.3 0-2.4 2.5-4.9 5.9-4.9z"/>
+    </g>
+    <g id="i-tooth">
+      <path d="M12 3.4c2.4 0 3.9-.8 5.2-.8 1.6 0 2.6 1.2 2.6 3.3 0 2.9-1 5.2-1.6 8.3-.5 2.5-1 5.2-2.5 5.2-1.7 0-1.7-3.3-2.3-5.4-.3-1-.6-1.5-1.4-1.5s-1.1.5-1.4 1.5c-.6 2.1-.6 5.4-2.3 5.4-1.5 0-2-2.7-2.5-5.2C5.2 11.1 4.2 8.8 4.2 5.9c0-2.1 1-3.3 2.6-3.3 1.3 0 2.8.8 5.2.8z"/>
+    </g>
+    <g id="i-flea">
+      <path d="M12 3L20 5.8v5.8c0 4.6-3.2 7.7-8 9.1-4.8-1.4-8-4.5-8-9.1V5.8z"/>
+      <path d="M9 12.2l2.1 2.1 4-4.2"/>
+    </g>
+    <g id="i-groom">
       <circle cx="6.4" cy="17.6" r="2.7"/>
       <circle cx="17.6" cy="17.6" r="2.7"/>
       <path d="M8.6 15.9L19 4M15.4 15.9L5 4"/>
@@ -348,22 +359,22 @@
           </div>
           <div class="quick-care-grid">
             <button class="quick-care-btn" id="care-nail" onclick="toggleQuickCare('nail')">
-              <span class="care-icon"><svg class="ico"><use href="#i-nail"/></svg></span>
+              <span class="care-icon"><svg class="ico ico-nail"><use href="#i-nail"/></svg></span>
               <span class="care-label">爪切り</span>
               <span class="care-status">未完了</span>
             </button>
             <button class="quick-care-btn" id="care-tooth" onclick="toggleQuickCare('tooth')">
-              <span class="care-icon">🪥</span>
+              <span class="care-icon"><svg class="ico ico-tooth"><use href="#i-tooth"/></svg></span>
               <span class="care-label">歯磨き</span>
               <span class="care-status">未完了</span>
             </button>
             <button class="quick-care-btn" id="care-flea" onclick="toggleQuickCare('flea')">
-              <span class="care-icon">💊</span>
+              <span class="care-icon"><svg class="ico ico-flea"><use href="#i-flea"/></svg></span>
               <span class="care-label">ノミ・ダニ予防</span>
               <span class="care-status">未完了</span>
             </button>
             <button class="quick-care-btn" id="care-groom" onclick="toggleQuickCare('groom')">
-              <span class="care-icon">✂️</span>
+              <span class="care-icon"><svg class="ico ico-groom"><use href="#i-groom"/></svg></span>
               <span class="care-label">トリミング</span>
               <span class="care-status">未完了</span>
             </button>
@@ -407,9 +418,10 @@
           <div id="care-calendar-container" style="margin-top:10px;">
             </div>
           <div class="care-legend" style="display:flex; gap:12px; flex-wrap:wrap; font-size:10.5px; font-weight:700; color:var(--text-light); margin-top:10px; border-top:1px dashed rgba(44,36,24,0.1); padding-top:8px; justify-content:center;">
-            <span><svg class="ico"><use href="#i-nail"/></svg> 爪切り</span>
-            <span>🪥 歯磨き</span>
-            <span>🛡️ ノミダニ</span>
+            <span><svg class="ico ico-nail"><use href="#i-nail"/></svg> 爪切り</span>
+            <span><svg class="ico ico-tooth"><use href="#i-tooth"/></svg> 歯磨き</span>
+            <span><svg class="ico ico-flea"><use href="#i-flea"/></svg> ノミダニ</span>
+            <span><svg class="ico ico-groom"><use href="#i-groom"/></svg> トリミング</span>
             <span>💊 お薬</span>
           </div>
         </div>
@@ -615,10 +627,10 @@
 
         <label class="field-label">今回やってもらった日常ケア（完了に自動連動）</label>
         <div class="care-checkbox-grid" style="display:flex;gap:12px;margin-bottom:12px;margin-top:2px;">
-          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-nail"> <svg class="ico"><use href="#i-nail"/></svg> 爪切り</label>
-          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-tooth"> 🪥 歯磨き</label>
-          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-flea"> 💊 ノミダニ</label>
-          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-groom"> ✂️ トリミング</label>
+          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-nail"> <svg class="ico ico-nail"><use href="#i-nail"/></svg> 爪切り</label>
+          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-tooth"> <svg class="ico ico-tooth"><use href="#i-tooth"/></svg> 歯磨き</label>
+          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-flea"> <svg class="ico ico-flea"><use href="#i-flea"/></svg> ノミダニ</label>
+          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-groom"> <svg class="ico ico-groom"><use href="#i-groom"/></svg> トリミング</label>
         </div>
 
         <label class="field-label">診療内容・症状メモ (自分だけの口コミ)</label>
@@ -865,16 +877,16 @@
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
           <div style="display:flex;gap:12px;flex:1;flex-wrap:wrap;">
             <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
-              <input type="checkbox" id="bulk-m-care-nail"> <svg class="ico"><use href="#i-nail"/></svg> 爪切り
+              <input type="checkbox" id="bulk-m-care-nail"> <svg class="ico ico-nail"><use href="#i-nail"/></svg> 爪切り
             </label>
             <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
-              <input type="checkbox" id="bulk-m-care-tooth"> 🪥 歯磨き
+              <input type="checkbox" id="bulk-m-care-tooth"> <svg class="ico ico-tooth"><use href="#i-tooth"/></svg> 歯磨き
             </label>
             <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
-              <input type="checkbox" id="bulk-m-care-flea"> 💊 ノミダニ
+              <input type="checkbox" id="bulk-m-care-flea"> <svg class="ico ico-flea"><use href="#i-flea"/></svg> ノミダニ
             </label>
             <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
-              <input type="checkbox" id="bulk-m-care-groom"> ✂️ トリミング
+              <input type="checkbox" id="bulk-m-care-groom"> <svg class="ico ico-groom"><use href="#i-groom"/></svg> トリミング
             </label>
           </div>
           <button onclick="syncBulkField('care')"

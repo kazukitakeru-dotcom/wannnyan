@@ -236,6 +236,12 @@ textarea.field-input { resize: vertical; min-height: 76px; line-height: 1.6; }
 }
 .quick-care-btn .care-icon .ico { width: 26px; height: 26px; stroke-width: 1.75; }
 
+/* 日常ケアは種類ごとに色を持たせる（絵文字の色味の代わり） */
+.ico-nail  { color: #c8844a; }
+.ico-tooth { color: #4a8fa8; }
+.ico-flea  { color: #5c9166; }
+.ico-groom { color: #9a6fa0; }
+
 /* 同期 */
 .btn-transfer.sync { background: #4a7fc8; color: white; }
 .btn-transfer.subtle { background: rgba(44,36,24,0.06); color: var(--text-light); margin-top: 8px; }
@@ -406,7 +412,7 @@ a, button {
 }
 .quick-care-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 .quick-care-btn {
@@ -424,7 +430,7 @@ a, button {
 }
 .quick-care-btn .care-icon {
   font-size: 26px;
-  filter: grayscale(0.7);
+  opacity: 0.5;
   transition: all 0.2s;
 }
 .quick-care-btn .care-label {
@@ -451,7 +457,7 @@ a, button {
   border-color: #a3e0be;
 }
 .quick-care-btn.completed .care-icon {
-  filter: grayscale(0);
+  opacity: 1;
   transform: scale(1.1);
 }
 .quick-care-btn.completed .care-status {
