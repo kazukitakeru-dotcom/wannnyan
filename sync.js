@@ -122,6 +122,11 @@ async function sbAccessToken() {
   }
 }
 
+// サーバー時刻でも「commit の順番」と now() は完全には一致しないので、
+// 前回取得位置を少しだけ巻き戻して取りこぼしを防ぐ。重複して取っても害はない。
+const PULL_MARGIN_MS = 5000;
+const PAGE_SIZE = 1000; // PostgREST の1回あたり上限に合わせる
+
 // ========== データAPI ==========
 async function _rest(path, { method = 'GET', body = null, prefer = null } = {}) {
   const token = await sbAccessToken();
@@ -143,6 +148,17 @@ async function _rest(path, { method = 'GET', body = null, prefer = null } = {}) 
   return null;
 }
 
+// 1回のGETには件数上限があるので、全部取れるまでページを送る。
+// 上限を超えた分は静かに落ちるだけでエラーにならないので、忘れると気づけない。
+async function _restAll(path) {
+  const out = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const page = await _rest(`${path}&limit=${PAGE_SIZE}&offset=${offset}`);
+    out.push(...page);
+    if (page.length < PAGE_SIZE) return out;
+  }
+}
+
 // ========== 変更検出 ==========
 // JSON全体を保存しておくと重いので、短いハッシュで「変わったか」だけ見る
 function _hash(str) {
@@ -157,7 +173,15 @@ function _hash(str) {
 
 async function _loadSyncState() {
   const s = await idbGet(SYNC_STATE_KEY);
-  return (s && typeof s === 'object') ? s : { lastPulledAt: null, pets: {}, hospitals: {}, touched: {} };
+  if (!s || typeof s !== 'object') {
+    return { lastPulledAt: null, pets: {}, hospitals: {}, touched: {}, serverTimeMigrated: true };
+  }
+  // 2026-08-06: updated_at を端末の時計からサーバー時刻に切り替えた。
+  // 切り替え前の lastPulledAt はずれた時計で書かれた値なので、
+  // そのまま基準にすると（時計が進んでいた端末では）何も取れなくなる。
+  // 1度だけ全件取り直させる。
+  if (!s.serverTimeMigrated) { s.lastPulledAt = null; s.serverTimeMigrated = true; }
+  return s;
 }
 async function _saveSyncState(s) { await idbSet(SYNC_STATE_KEY, s); }
 
@@ -227,8 +251,8 @@ async function syncNow(opts = {}) {
 async function _pull(state) {
   const since = state.lastPulledAt ? `&updated_at=gt.${encodeURIComponent(state.lastPulledAt)}` : '';
   const [remotePets, remoteHosps] = await Promise.all([
-    _rest(`wannyan_pets?select=pet_id,pet_type,data,updated_at,deleted${since}`),
-    _rest(`wannyan_hospitals?select=hospital_id,data,updated_at,deleted${since}`),
+    _restAll(`wannyan_pets?select=pet_id,pet_type,data,updated_at,deleted&order=updated_at.asc,pet_id.asc${since}`),
+    _restAll(`wannyan_hospitals?select=hospital_id,data,updated_at,deleted&order=updated_at.asc,hospital_id.asc${since}`),
   ]);
   if (!remotePets.length && !remoteHosps.length) return;
 
@@ -283,7 +307,8 @@ async function _pull(state) {
     await idbSet('wannyan_hospitals_v1', list);
   }
 
-  state.lastPulledAt = newest;
+  // commit の順と now() のわずかなズレで取りこぼさないよう、少しだけ巻き戻す
+  if (newest) state.lastPulledAt = new Date(Date.parse(newest) - PULL_MARGIN_MS).toISOString();
 
   // 画面に出ている内容を更新する
   if (typeof currentType !== 'undefined' && currentType && typeof renderList === 'function') {
@@ -307,15 +332,15 @@ async function _push(state) {
       seen.add(id);
       const h = _hash(JSON.stringify(pet));
       if (state.pets[id] === h) return; // 変わっていない
-      rows.push({ user_id: userId, pet_id: id, pet_type: type, data: pet,
-                  updated_at: new Date().toISOString(), deleted: false });
+      // updated_at は送らない。サーバー側のトリガが now() を入れる。
+      // 端末の時計で入れると、時計がずれた端末の行が差分同期の網から永久に漏れる。
+      rows.push({ user_id: userId, pet_id: id, pet_type: type, data: pet, deleted: false });
     });
   });
   // ローカルで消えた子は削除フラグを立てる
   Object.keys(state.pets).forEach(id => {
     if (seen.has(id)) return;
-    rows.push({ user_id: userId, pet_id: id, pet_type: 'dog', data: {},
-                updated_at: new Date().toISOString(), deleted: true });
+    rows.push({ user_id: userId, pet_id: id, pet_type: 'dog', data: {}, deleted: true });
   });
 
   if (rows.length) {
@@ -337,13 +362,11 @@ async function _push(state) {
     hSeen.add(id);
     const hh = _hash(JSON.stringify(h));
     if (state.hospitals[id] === hh) return;
-    hRows.push({ user_id: userId, hospital_id: id, data: h,
-                 updated_at: new Date().toISOString(), deleted: false });
+    hRows.push({ user_id: userId, hospital_id: id, data: h, deleted: false });
   });
   Object.keys(state.hospitals).forEach(id => {
     if (hSeen.has(id)) return;
-    hRows.push({ user_id: userId, hospital_id: id, data: {},
-                 updated_at: new Date().toISOString(), deleted: true });
+    hRows.push({ user_id: userId, hospital_id: id, data: {}, deleted: true });
   });
 
   if (hRows.length) {
