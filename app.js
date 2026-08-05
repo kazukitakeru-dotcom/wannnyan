@@ -126,8 +126,8 @@ async function saveHospitals(list) { await idbSet('wannyan_hospitals_v1', list);
 const ISSUES = {
   dog: [
     {key:'walk',   icon:'🦮', label:'散歩'},
-    {key:'toilet', icon:'🚽', label:'トイレ'},
-    {key:'bark',   icon:'📢', label:'吠え'},
+    {key:'toilet', icon:'<svg class="ico"><use href="#i-toilet"/></svg>', label:'トイレ'},
+    {key:'bark',   icon:'<svg class="ico"><use href="#i-bark"/></svg>', label:'吠え'},
     {key:'bite',   icon:'🦷', label:'噛みつき'},
     {key:'social', icon:'🤝', label:'慣れ'},
     {key:'free',   icon:'📝', label:'自由記入'},
@@ -135,7 +135,7 @@ const ISSUES = {
   cat: [
     {key:'cry',    icon:'😿', label:'鳴き'},
     {key:'dental', icon:'🪥', label:'歯磨き'},
-    {key:'toilet', icon:'🚽', label:'トイレ'},
+    {key:'toilet', icon:'<svg class="ico"><use href="#i-toilet"/></svg>', label:'トイレ'},
     {key:'free',   icon:'📝', label:'自由記入'},
   ],
 };
@@ -1688,7 +1688,7 @@ async function renderCareCalendar() {
     const hasMedicine = Object.keys(medicineLogs).length > 0;
 
     let icons = '';
-    if (quickCares.nail) icons += '<span style="font-size:10px;">💅</span>';
+    if (quickCares.nail) icons += '<svg class="ico" style="width:10px;height:10px"><use href="#i-nail"/></svg>';
     if (quickCares.tooth) icons += '<span style="font-size:10px;">🪥</span>';
     if (quickCares.flea) icons += '<span style="font-size:10px;">🛡️</span>';
     if (quickCares.groom) icons += '<span style="font-size:10px;">✂️</span>';
@@ -2543,7 +2543,7 @@ async function renderMedicalTimeline() {
       
       let caresList = [];
       if (rec.cares) {
-        if (rec.cares.nail) caresList.push('💅爪切り');
+        if (rec.cares.nail) caresList.push('<svg class="ico"><use href="#i-nail"/></svg>爪切り');
         if (rec.cares.tooth) caresList.push('🪥歯磨き');
         if (rec.cares.flea) caresList.push('🛡️ノミダニ');
         if (rec.cares.groom) caresList.push('✂️トリミング');
@@ -2867,7 +2867,7 @@ async function renderBulkPetsList(allPets) {
         <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
             <input type="checkbox" id="bulk-ind-nail-${key}"
-              ${document.getElementById('bulk-m-care-nail')?.checked?'checked':''}> 💅 爪切り
+              ${document.getElementById('bulk-m-care-nail')?.checked?'checked':''}> <svg class="ico"><use href="#i-nail"/></svg> 爪切り
           </label>
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
             <input type="checkbox" id="bulk-ind-tooth-${key}"
