@@ -126,16 +126,16 @@ async function saveHospitals(list) { await idbSet('wannyan_hospitals_v1', list);
 const ISSUES = {
   dog: [
     {key:'walk',   icon:'🦮', label:'散歩'},
-    {key:'toilet', icon:'<svg class="ico"><use href="#i-toilet"/></svg>', label:'トイレ'},
-    {key:'bark',   icon:'<svg class="ico"><use href="#i-bark"/></svg>', label:'吠え'},
+    {key:'toilet', icon:'🚽', label:'トイレ'},
+    {key:'bark',   icon:'📢', label:'吠え'},
     {key:'bite',   icon:'🦷', label:'噛みつき'},
     {key:'social', icon:'🤝', label:'慣れ'},
     {key:'free',   icon:'📝', label:'自由記入'},
   ],
   cat: [
     {key:'cry',    icon:'😿', label:'鳴き'},
-    {key:'dental', icon:'<svg class="ico ico-tooth"><use href="#i-tooth"/></svg>', label:'歯磨き'},
-    {key:'toilet', icon:'<svg class="ico"><use href="#i-toilet"/></svg>', label:'トイレ'},
+    {key:'dental', icon:'🪥', label:'歯磨き'},
+    {key:'toilet', icon:'🚽', label:'トイレ'},
     {key:'free',   icon:'📝', label:'自由記入'},
   ],
 };
@@ -1688,12 +1688,11 @@ async function renderCareCalendar() {
     const hasMedicine = Object.keys(medicineLogs).length > 0;
 
     let icons = '';
-    const calIco = k => `<svg class="ico ico-cal ico-${k}"><use href="#i-${k}"/></svg>`;
-    if (quickCares.nail) icons += calIco('nail');
-    if (quickCares.tooth) icons += calIco('tooth');
-    if (quickCares.flea) icons += calIco('flea');
-    if (quickCares.groom) icons += calIco('groom');
-    if (hasMedicine) icons += calIco('med');
+    if (quickCares.nail) icons += '<span style="font-size:10px;">💅</span>';
+    if (quickCares.tooth) icons += '<span style="font-size:10px;">🪥</span>';
+    if (quickCares.flea) icons += '<span style="font-size:10px;">🛡️</span>';
+    if (quickCares.groom) icons += '<span style="font-size:10px;">✂️</span>';
+    if (hasMedicine) icons += '<span style="font-size:10px;">💊</span>';
 
     const isToday = (dateStr === tStr);
     const bg = isToday ? 'background:rgba(200,132,74,0.1); border-radius:6px;' : '';

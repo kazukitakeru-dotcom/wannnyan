@@ -241,10 +241,6 @@ textarea.field-input { resize: vertical; min-height: 76px; line-height: 1.6; }
 .ico-tooth { color: #4a8fa8; }
 .ico-flea  { color: #5c9166; }
 .ico-groom { color: #9a6fa0; }
-.ico-med   { color: #c2607a; }
-
-/* カレンダーのマス目は狭いので一回り小さく、線も細く */
-.ico-cal { width: 10px; height: 10px; stroke-width: 2.1; }
 
 /* 同期 */
 .btn-transfer.sync { background: #4a7fc8; color: white; }
