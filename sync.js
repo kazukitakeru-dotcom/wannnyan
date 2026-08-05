@@ -13,6 +13,43 @@ const SB_KEY = 'sb_publishable_nSwOQo-YbEtDN_KTjBf80w_D6o0iLoA';
 
 const SESSION_KEY = 'wannyan_session_v1';
 const SYNC_STATE_KEY = 'wannyan_sync_state_v1';
+const ROLLBACK_KEY = 'wannyan_rollback_v1';
+
+// ========== 取り込み前の巻き戻し用スナップショット ==========
+// クラウドの内容を反映する直前に、その端末のデータを丸ごと控えておく。
+// 万一おかしくなっても1タップで戻せるようにするための保険。
+async function saveRollback(reason) {
+  try {
+    const snap = {
+      at: Date.now(),
+      reason,
+      pets: (await idbGet('wannyan_v2')) || { dog: [], cat: [] },
+      hospitals: (await idbGet('wannyan_hospitals_v1')) || [],
+    };
+    const petCount = (snap.pets.dog || []).length + (snap.pets.cat || []).length;
+    if (!petCount && !snap.hospitals.length) return; // 空を控えても意味がない
+    await idbSet(ROLLBACK_KEY, snap);
+  } catch (e) { /* 保険が取れなくても本処理は止めない */ }
+}
+
+async function restoreRollback() {
+  const snap = await idbGet(ROLLBACK_KEY);
+  if (!snap) { alert('戻せる控えがありません。'); return; }
+  const n = (snap.pets.dog || []).length + (snap.pets.cat || []).length;
+  const when = new Date(snap.at).toLocaleString('ja-JP');
+  if (!confirm(`${when} 時点の内容（${n}匹）に戻します。\n今この端末にあるデータは置き換わります。よろしいですか？`)) return;
+
+  await idbSet('wannyan_v2', snap.pets);
+  await idbSet('wannyan_hospitals_v1', snap.hospitals);
+  // 送信済みの目印を消して、戻した内容を改めてクラウドへ反映させる
+  await idbSet(SYNC_STATE_KEY, null);
+  showToast('戻しました');
+  if (typeof currentType !== 'undefined' && currentType && typeof renderList === 'function') {
+    try { await renderList(); } catch (e) {}
+  }
+  await syncNow({ toast: false });
+  updateSyncUI();
+}
 
 // ========== セッション ==========
 function sbLoadSession() {
@@ -135,6 +172,32 @@ function scheduleSync(delay = 2500) {
   _syncTimer = setTimeout(() => { syncNow().catch(() => {}); }, delay);
 }
 
+// この端末で初めて同期するときだけ、合流するか置き換えるかを決める。
+// 端末にデータが無ければ迷う余地がないので何も聞かない。
+async function firstSyncSetup() {
+  const state = await _loadSyncState();
+  if (state.initialized) return;
+
+  const local = (await idbGet('wannyan_v2')) || { dog: [], cat: [] };
+  const n = (local.dog || []).length + (local.cat || []).length;
+
+  if (n > 0) {
+    await saveRollback('初回同期の前');
+    const merge = confirm(
+      `この端末には ${n}匹 の記録があります。\n\n` +
+      `［OK］この端末の記録もクラウドに合流させる\n` +
+      `［キャンセル］クラウドの内容だけを取り込む\n\n` +
+      `どちらを選んでも、今の内容は控えに保存され、あとから戻せます。`
+    );
+    if (!merge) {
+      await idbSet('wannyan_v2', { dog: [], cat: [] });
+      await idbSet('wannyan_hospitals_v1', []);
+    }
+  }
+  state.initialized = true;
+  await _saveSyncState(state);
+}
+
 async function syncNow(opts = {}) {
   if (_syncing) return;
   if (!sbIsLoggedIn()) return;
@@ -143,6 +206,7 @@ async function syncNow(opts = {}) {
   _syncing = true;
   updateSyncUI();
   try {
+    await firstSyncSetup();
     const state = await _loadSyncState();
     await _pull(state);
     await _push(state);
@@ -167,6 +231,9 @@ async function _pull(state) {
     _rest(`wannyan_hospitals?select=hospital_id,data,updated_at,deleted${since}`),
   ]);
   if (!remotePets.length && !remoteHosps.length) return;
+
+  // これから端末のデータを書き換えるので、直前の状態を控えておく
+  await saveRollback('取り込み前');
 
   let newest = state.lastPulledAt;
   const bump = ts => { if (!newest || ts > newest) newest = ts; };
@@ -355,6 +422,8 @@ function updateSyncUI() {
     if (inBtn) inBtn.classList.remove('hidden');
     if (outBtn) outBtn.classList.add('hidden');
     if (nowBtn) nowBtn.classList.add('hidden');
+    const rb = document.getElementById('sync-rollback-btn');
+    if (rb) rb.classList.add('hidden');
     return;
   }
   if (inBtn) inBtn.classList.add('hidden');
@@ -371,6 +440,19 @@ function updateSyncUI() {
     const t = st && st.lastSyncedAt;
     box.textContent = `${s.email}／最終同期 ${t ? new Date(t).toLocaleString('ja-JP') : 'まだ'}`;
     box.className = 'sync-status ok';
+  }).catch(() => {});
+
+  updateRollbackUI();
+}
+
+function updateRollbackUI() {
+  const btn = document.getElementById('sync-rollback-btn');
+  if (!btn) return;
+  idbGet(ROLLBACK_KEY).then(snap => {
+    if (!snap) { btn.classList.add('hidden'); return; }
+    const n = (snap.pets.dog || []).length + (snap.pets.cat || []).length;
+    btn.textContent = `取り込み前（${n}匹）に戻す`;
+    btn.classList.remove('hidden');
   }).catch(() => {});
 }
 

@@ -197,6 +197,7 @@
           <div id="sync-status" class="sync-status">…</div>
           <button class="btn-transfer sync" id="sync-login-btn" onclick="openSyncLogin()">ログイン / 新規登録</button>
           <button class="btn-transfer sync hidden" id="sync-now-btn" onclick="syncNow({toast:true})">今すぐ同期</button>
+          <button class="btn-transfer subtle hidden" id="sync-rollback-btn" onclick="restoreRollback()">取り込み前に戻す</button>
           <button class="btn-transfer subtle hidden" id="sync-logout-btn" onclick="doSyncLogout()">ログアウト</button>
         </div>
         <div class="transfer-divider"></div>
@@ -336,6 +337,11 @@
             <button class="quick-care-btn" id="care-flea" onclick="toggleQuickCare('flea')">
               <span class="care-icon">💊</span>
               <span class="care-label">ノミ・ダニ予防</span>
+              <span class="care-status">未完了</span>
+            </button>
+            <button class="quick-care-btn" id="care-groom" onclick="toggleQuickCare('groom')">
+              <span class="care-icon">✂️</span>
+              <span class="care-label">トリミング</span>
               <span class="care-status">未完了</span>
             </button>
           </div>
@@ -589,6 +595,7 @@
           <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-nail"> 💅 爪切り</label>
           <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-tooth"> 🪥 歯磨き</label>
           <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-flea"> 💊 ノミダニ</label>
+          <label class="care-checkbox-label" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);"><input type="checkbox" id="m-care-groom"> ✂️ トリミング</label>
         </div>
 
         <label class="field-label">診療内容・症状メモ (自分だけの口コミ)</label>
@@ -842,6 +849,9 @@
             </label>
             <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
               <input type="checkbox" id="bulk-m-care-flea"> 💊 ノミダニ
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
+              <input type="checkbox" id="bulk-m-care-groom"> ✂️ トリミング
             </label>
           </div>
           <button onclick="syncBulkField('care')"

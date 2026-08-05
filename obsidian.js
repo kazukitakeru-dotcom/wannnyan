@@ -127,7 +127,7 @@ function isoDate(d) { return `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pa
 function tsToIso(ts) { return ts ? isoDate(new Date(ts)) : ''; }
 
 const OBS_TYPE_LABEL = { dog: '犬', cat: '猫' };
-const OBS_CARE_LABEL = { nail: '爪切り', tooth: '歯磨き', flea: 'ノミダニ予防' };
+const OBS_CARE_LABEL = { nail: '爪切り', tooth: '歯磨き', flea: 'ノミダニ予防', groom: 'トリミング' };
 const OBS_CERT_LABEL = { vaccine: '混合ワクチン予防接種証明書', rabies: '狂犬病予防注射済証', antibody: '抗体価検査証明' };
 const OBS_AB_LABEL = {
   dog: ['CDV（ジステンパー）', 'CAV（アデノ）', 'CPV（パルボ）'],
@@ -374,7 +374,7 @@ function obsPetNote(pet, type, ctx) {
   const qc = pet.quickCares || {};
   const qcDates = Object.keys(qc).filter(d => {
     const c = qc[d] || {};
-    return c.nail || c.tooth || c.flea || c.walkMinutes;
+    return c.nail || c.tooth || c.flea || c.groom || c.walkMinutes;
   }).sort();
   const mlogs = pet.medicineLogs || {};
   const medName = id => (meds.find(m => m.id === id) || {}).name || id;
@@ -382,11 +382,11 @@ function obsPetNote(pet, type, ctx) {
   if (qcDates.length) {
     L.push('## 日々のケア記録');
     L.push('');
-    L.push('| 日付 | 爪切り | 歯磨き | ノミダニ | 散歩(分) | 散歩の時間帯 |');
-    L.push('| --- | --- | --- | --- | --- | --- |');
+    L.push('| 日付 | 爪切り | 歯磨き | ノミダニ | トリミング | 散歩(分) | 散歩の時間帯 |');
+    L.push('| --- | --- | --- | --- | --- | --- | --- |');
     qcDates.forEach(d => {
       const c = qc[d] || {};
-      L.push(`| ${cell(d)} | ${c.nail ? '○' : ''} | ${c.tooth ? '○' : ''} | ${c.flea ? '○' : ''} | ${cell(c.walkMinutes || '')} | ${cell((c.walkTimeOfDay || []).join('、'))} |`);
+      L.push(`| ${cell(d)} | ${c.nail ? '○' : ''} | ${c.tooth ? '○' : ''} | ${c.flea ? '○' : ''} | ${c.groom ? '○' : ''} | ${cell(c.walkMinutes || '')} | ${cell((c.walkTimeOfDay || []).join('、'))} |`);
     });
     L.push('');
 

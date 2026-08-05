@@ -1691,6 +1691,7 @@ async function renderCareCalendar() {
     if (quickCares.nail) icons += '<span style="font-size:10px;">💅</span>';
     if (quickCares.tooth) icons += '<span style="font-size:10px;">🪥</span>';
     if (quickCares.flea) icons += '<span style="font-size:10px;">🛡️</span>';
+    if (quickCares.groom) icons += '<span style="font-size:10px;">✂️</span>';
     if (hasMedicine) icons += '<span style="font-size:10px;">💊</span>';
 
     const isToday = (dateStr === tStr);
@@ -1728,7 +1729,7 @@ async function renderQuickCares() {
   if (!dateStr) return;
   
   const dayCares = pet.quickCares[dateStr] || {};
-  const careTypes = ['nail', 'tooth', 'flea'];
+  const careTypes = ['nail', 'tooth', 'flea', 'groom'];
   
   careTypes.forEach(type => {
     const btn = document.getElementById(`care-${type}`);
@@ -1773,7 +1774,7 @@ async function toggleQuickCare(type) {
   await renderQuickCares();
   await renderCareCalendar();
   
-  const labelMap = { nail: '爪切り', tooth: '歯磨き', flea: 'ノミ・ダニ予防' };
+  const labelMap = { nail: '爪切り', tooth: '歯磨き', flea: 'ノミ・ダニ予防', groom: 'トリミング' };
   showToast(`${labelMap[type]}を${nextVal ? '完了にしました' : '未完了にしました'}`);
 }
 
@@ -2545,6 +2546,7 @@ async function renderMedicalTimeline() {
         if (rec.cares.nail) caresList.push('💅爪切り');
         if (rec.cares.tooth) caresList.push('🪥歯磨き');
         if (rec.cares.flea) caresList.push('🛡️ノミダニ');
+        if (rec.cares.groom) caresList.push('✂️トリミング');
       }
       const caresHtml = caresList.length > 0 ? `<div class="timeline-item-meta" style="color:var(--text-dark); font-weight:700;">日常ケア：${caresList.join('、')}</div>` : '';
       const weightHtml = rec.weight ? `<div class="timeline-item-meta" style="color:var(--text-dark); font-weight:700;">体重：${rec.weight} kg</div>` : '';
@@ -2676,13 +2678,16 @@ async function syncBulkField(field) {
     const nail  = document.getElementById('bulk-m-care-nail').checked;
     const tooth = document.getElementById('bulk-m-care-tooth').checked;
     const flea  = document.getElementById('bulk-m-care-flea').checked;
+    const groom = document.getElementById('bulk-m-care-groom').checked;
     targets.forEach(pet => {
       const n = document.getElementById(`bulk-ind-nail-${pet.petType}-${pet.id}`);
       const t = document.getElementById(`bulk-ind-tooth-${pet.petType}-${pet.id}`);
       const f = document.getElementById(`bulk-ind-flea-${pet.petType}-${pet.id}`);
+      const g = document.getElementById(`bulk-ind-groom-${pet.petType}-${pet.id}`);
       if (n) n.checked = nail;
       if (t) t.checked = tooth;
       if (f) f.checked = flea;
+      if (g) g.checked = groom;
     });
     showToast('日常ケアを全員に同期しました');
   }
@@ -2871,6 +2876,10 @@ async function renderBulkPetsList(allPets) {
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
             <input type="checkbox" id="bulk-ind-flea-${key}"
               ${document.getElementById('bulk-m-care-flea')?.checked?'checked':''}> 💊 ノミダニ
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--text-dark);">
+            <input type="checkbox" id="bulk-ind-groom-${key}"
+              ${document.getElementById('bulk-m-care-groom')?.checked?'checked':''}> ✂️ トリミング
           </label>
         </div>
 
@@ -3074,6 +3083,7 @@ async function saveBulkMedicalRecord() {
       const nail       = document.getElementById(`bulk-ind-nail-${key}`)?.checked || false;
       const tooth      = document.getElementById(`bulk-ind-tooth-${key}`)?.checked || false;
       const flea       = document.getElementById(`bulk-ind-flea-${key}`)?.checked || false;
+      const groom      = document.getElementById(`bulk-ind-groom-${key}`)?.checked || false;
       const notes      = (document.getElementById(`bulk-ind-notes-${key}`)?.value || '').trim();
 
       // ワクチン情報収集
@@ -3103,7 +3113,7 @@ async function saveBulkMedicalRecord() {
         cost: cost ? Number(cost) : '',
         notes, photo: null,
         weight: recWeight ? Number(recWeight) : '',
-        cares: { nail, tooth, flea },
+        cares: { nail, tooth, flea, groom },
         vaccineName, antibodyVals
       };
       p.medicalRecords.push(recData);
@@ -3117,11 +3127,12 @@ async function saveBulkMedicalRecord() {
         if (sh.length > 0) p.weight = String(sh[0].weight);
       }
 
-      if (nail || tooth || flea) {
+      if (nail || tooth || flea || groom) {
         if (!p.quickCares[date]) p.quickCares[date] = {};
         if (nail)  p.quickCares[date].nail  = true;
         if (tooth) p.quickCares[date].tooth = true;
         if (flea)  p.quickCares[date].flea  = true;
+        if (groom) p.quickCares[date].groom = true;
       }
 
       // ワクチンの場合は証明書にも自動同期
@@ -3186,6 +3197,7 @@ async function openMedicalRecordModal(recordId = null) {
   document.getElementById('m-care-nail').checked = false;
   document.getElementById('m-care-tooth').checked = false;
   document.getElementById('m-care-flea').checked = false;
+  document.getElementById('m-care-groom').checked = false;
   document.getElementById('m-photo-preview').src = '';
   document.getElementById('m-photo-preview').classList.add('hidden');
   document.getElementById('m-photo-placeholder').classList.remove('hidden');
@@ -3256,6 +3268,7 @@ async function openMedicalRecordModal(recordId = null) {
         document.getElementById('m-care-nail').checked = !!rec.cares.nail;
         document.getElementById('m-care-tooth').checked = !!rec.cares.tooth;
         document.getElementById('m-care-flea').checked = !!rec.cares.flea;
+        document.getElementById('m-care-groom').checked = !!rec.cares.groom;
       }
       
       // ワクチン情報の復元
@@ -3435,6 +3448,7 @@ async function saveMedicalRecord() {
   const nailChecked = document.getElementById('m-care-nail').checked;
   const toothChecked = document.getElementById('m-care-tooth').checked;
   const fleaChecked = document.getElementById('m-care-flea').checked;
+  const groomChecked = document.getElementById('m-care-groom').checked;
 
   const recType = document.getElementById('m-type').value;
   let vaccineName = '';
@@ -3467,7 +3481,7 @@ async function saveMedicalRecord() {
     notes: digestSelectedPendingNotes(currentPetId, document.getElementById('m-notes').value.trim()),
     photo: tempMedicalPhoto || null,
     weight: recWeight ? Number(recWeight) : '',
-    cares: { nail: nailChecked, tooth: toothChecked, flea: fleaChecked },
+    cares: { nail: nailChecked, tooth: toothChecked, flea: fleaChecked, groom: groomChecked },
     vaccineName,
     antibodyVals
   };
@@ -3501,13 +3515,14 @@ async function saveMedicalRecord() {
   }
 
   // 日常ケア（爪切り、歯磨き、ノミダニ）の自動完了同期
-  if (nailChecked || toothChecked || fleaChecked) {
+  if (nailChecked || toothChecked || fleaChecked || groomChecked) {
     if (!pet.quickCares[date]) {
       pet.quickCares[date] = {};
     }
     if (nailChecked) pet.quickCares[date].nail = true;
     if (toothChecked) pet.quickCares[date].tooth = true;
     if (fleaChecked) pet.quickCares[date].flea = true;
+    if (groomChecked) pet.quickCares[date].groom = true;
   }
 
   // 【証明書への自動同期】ワクチン種別に応じて証明書側も更新
@@ -3916,7 +3931,7 @@ async function saveCertificateRecord() {
       notes: syncNotes,
       photo: certData.photo || null,
       weight: inheritWeight,
-      cares: { nail: false, tooth: false, flea: false },
+      cares: { nail: false, tooth: false, flea: false, groom: false },
       vaccineName: syncName,
       antibodyVals: syncAbVals
     };
