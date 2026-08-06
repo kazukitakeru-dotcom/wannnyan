@@ -227,6 +227,26 @@ textarea.field-input { resize: vertical; min-height: 76px; line-height: 1.6; }
 .btn-transfer.danger { background: rgba(224,80,80,0.1); color: var(--red); border: 1.5px solid var(--red); }
 .transfer-divider { height: 1px; background: rgba(44,36,24,0.08); margin: 16px 0; }
 
+/* 散歩中の常時表示バー（どの画面にいても分かるように） */
+.walk-banner {
+  position: fixed; left: 12px; right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 900; display: flex; align-items: center; gap: 9px;
+  background: var(--accent); color: #fff;
+  border-radius: 14px; padding: 11px 15px;
+  box-shadow: 0 6px 20px rgba(44,36,24,0.28);
+  font-size: 13px; font-weight: 800; cursor: pointer;
+  animation: walkBannerIn 0.25s ease both;
+}
+.walk-banner.hidden { display: none; }
+.walk-banner-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.walk-banner-time { font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 800; }
+.walk-banner-paw { animation: floatPaw 2.4s ease-in-out infinite; }
+@keyframes walkBannerIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .walk-banner, .walk-banner-paw { animation: none; }
+}
+
 /* 線画アイコン（絵文字の置き換え） */
 .ico {
   width: 1em; height: 1em;

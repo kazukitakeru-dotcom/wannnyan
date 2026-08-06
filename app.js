@@ -291,6 +291,12 @@ function calcAge(bday) {
   return y===0?`${m}ヶ月`:`${y}歳${m>0?m+'ヶ月':''}`;
 }
 function todayStr() { const d=new Date(); return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`; }
+// 端末の時刻での YYYY-MM-DD。
+// toISOString() は UTC なので、日本時間の朝9時前だと前日を返してしまう。
+// 記録の日付は必ずこちらを使うこと。
+function localDateStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function formatDate(dateStr) {
   if(!dateStr)return '';
   const d=new Date(dateStr);
@@ -2702,7 +2708,7 @@ async function openBulkMedicalModal() {
   if (allPets.length === 0) { alert('ペットが登録されていません'); return; }
 
   // 共通フィールド初期化
-  document.getElementById('bulk-m-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('bulk-m-date').value = localDateStr();
   const hospitals = await getHospitals();
   const hospOpts = '<option value="">-- 選択してください --</option>' +
     hospitals.map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
@@ -3189,7 +3195,7 @@ async function openMedicalRecordModal(recordId = null) {
   
   // 各自フィールドの初期化
   document.getElementById('edit-medical-id').value = recordId || '';
-  document.getElementById('m-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('m-date').value = localDateStr();
   // m-doctor は renderMedicalDoctorSelect で生成するためここでは何もしない
   document.getElementById('m-cost').value = '';
   document.getElementById('m-notes').value = '';
@@ -3702,7 +3708,7 @@ async function openCertificateModal(certKey) {
   resultWrap.style.display = certKey === 'antibody' ? 'block' : 'none';
   
   // デフォルト値の初期化
-  document.getElementById('c-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('c-date').value = localDateStr();
   document.getElementById('c-name').value = '';
   document.getElementById('c-ab-val1').value = '';
   document.getElementById('c-ab-val2').value = '';
@@ -4332,7 +4338,7 @@ async function addMedicineHistory(medId) {
   if (!med) return;
   if (!med.history) med.history = [];
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   const startDate = prompt('開始日を入力してください（例: 2024-01-15）', today);
   if (!startDate) return;
   const endDate = prompt('終了日を入力してください（継続中の場合は空のままEnter）', '') || '';
@@ -4395,7 +4401,7 @@ async function openMedicineModal(medId = null) {
   document.getElementById('edit-medicine-id').value = medId || '';
   document.getElementById('med-name').value = '';
   document.getElementById('med-usage').value = '';
-  document.getElementById('med-start-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('med-start-date').value = localDateStr();
   document.getElementById('med-end-date').value = '';
   document.getElementById('med-memo').value = '';
   
@@ -4732,6 +4738,7 @@ function startWalkTimer(petId, extraPetIds) {
   saveWalkGroup(petId, petIds);
   // 即座にタイマーUIを描画してからtickを開始
   renderWalkTimer();
+  renderWalkBanner();
 }
 
 async function stopWalkTimer() {
@@ -4741,8 +4748,37 @@ async function stopWalkTimer() {
   walkTimerInterval = null;
   const now = new Date();
   const elapsed = Math.floor((Date.now() - state.startTs) / 1000);
-  const mins = Math.floor(elapsed / 60);
+  // 保存する分数は四捨五入する。切り捨てだと1分未満が全部0分になり、記録した気になって何も残らない。
+  const mins = Math.round(elapsed / 60);
+  // 表示は実際の経過時間そのもの（四捨五入後の分数と余り秒を混ぜると「1分40秒」のような嘘になる）
+  const dispM = Math.floor(elapsed / 60);
   const secs = elapsed % 60;
+
+  // 30秒未満は押し間違いとみなして記録しない
+  if (mins < 1) {
+    saveWalkTimerState(null);
+    renderWalkTimer();
+    renderWalkBanner();
+    showToast(`短すぎるため記録しませんでした（${secs}秒）`);
+    return;
+  }
+
+  // 止め忘れ対策。6時間を超えたら、そのまま保存する前に確認する。
+  if (elapsed > 6 * 3600) {
+    const h = Math.floor(mins / 60), m = mins % 60;
+    const ok = confirm(
+      `${h}時間${m}分の散歩として記録しようとしています。\n\n` +
+      `終了を押し忘れていませんか？\n\n` +
+      `［OK］このまま記録する\n［キャンセル］記録せずに終了する`
+    );
+    if (!ok) {
+      saveWalkTimerState(null);
+      renderWalkTimer();
+      renderWalkBanner();
+      showToast('記録せずに終了しました');
+      return;
+    }
+  }
 
   // 時間帯ラベルを生成（開始時刻をもとに）
   const startHour = state.startHour !== undefined ? state.startHour : now.getHours();
@@ -4758,7 +4794,7 @@ async function stopWalkTimer() {
   const petIds = state.petIds || [state.petId];
   try {
     const data = await loadData();
-    const dateStr = now.toISOString().split('T')[0];
+    const dateStr = localDateStr(now);
     ['dog','cat'].forEach(type => {
       (data[type] || []).forEach((pet, idx) => {
         if (petIds.includes(`${type}-${pet.id}`) || petIds.includes(pet.id)) {
@@ -4781,8 +4817,9 @@ async function stopWalkTimer() {
 
   saveWalkTimerState(null);
   renderWalkTimer();
+  renderWalkBanner();
   const memberCount = petIds.length;
-  showToast(`散歩終了 🐾 ${mins}分${secs}秒${memberCount > 1 ? ` (${memberCount}頭)` : ''}`);
+  showToast(`散歩終了 🐾 ${dispM}分${secs}秒${memberCount > 1 ? ` (${memberCount}頭)` : ''}`);
 }
 
 function tickWalkTimer() {
@@ -4814,23 +4851,68 @@ function tickWalkTimer() {
 
 function onVisibilityChange() {
   if (document.hidden) {
+    // 経過時間は startTs からの引き算で出すので、裏に回っている間は数える必要がない。
+    // （以前はここで backgroundMins を書いていたが、どこからも読まれていなかった）
     clearInterval(walkTimerInterval);
     walkTimerInterval = null;
-    // バックグラウンド移行時にタイマー状態が存在すれば中間保存（途中経過を保護）
-    const state = loadWalkTimerState();
-    if (state) {
-      const elapsed = Math.floor((Date.now() - state.startTs) / 1000);
-      const mins = Math.floor(elapsed / 60);
-      if (mins > 0) {
-        // タイマーは継続中のまま（startTsは変えない）、中断フラグだけ立てる
-        // ※バックグラウンドで終了判定された場合に備えて現在分数をstateに保存
-        const backupState = { ...state, backgroundMins: mins };
-        saveWalkTimerState(backupState);
-      }
-    }
   } else {
     const state = loadWalkTimerState();
     if (state) tickWalkTimer();
+  }
+}
+
+// ========== 散歩中バナー（全画面共通） ==========
+// 散歩は「その子の画面を開かないと動いているか分からない」状態だと終了を押し忘れる。
+// どの画面にいても見えるところに出しておく。
+let walkBannerInterval = null;
+
+async function renderWalkBanner() {
+  const el = document.getElementById('walk-banner');
+  if (!el) return;
+  const state = loadWalkTimerState();
+  if (!state) {
+    el.classList.add('hidden');
+    clearInterval(walkBannerInterval); walkBannerInterval = null;
+    return;
+  }
+
+  // 誰と散歩中かを名前で出す
+  let label = '散歩中';
+  try {
+    const data = await loadData();
+    const all = [...(data.dog||[]).map(p=>({...p,t:'dog'})), ...(data.cat||[]).map(p=>({...p,t:'cat'}))];
+    const names = (state.petIds || [state.petId])
+      .map(id => (all.find(p => `${p.t}-${p.id}` === id || p.id === id) || {}).name)
+      .filter(Boolean);
+    if (names.length) label = `${names.join('・')} と散歩中`;
+  } catch(e) {}
+  document.getElementById('walk-banner-text').textContent = label;
+  el.classList.remove('hidden');
+
+  const tick = () => {
+    const st = loadWalkTimerState();
+    if (!st) { renderWalkBanner(); return; }
+    const e = Math.floor((Date.now() - st.startTs) / 1000);
+    const t = document.getElementById('walk-banner-time');
+    if (t) t.textContent = `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;
+  };
+  tick();
+  clearInterval(walkBannerInterval);
+  walkBannerInterval = setInterval(tick, 1000);
+}
+
+// バナーをタップしたら、散歩中の子の画面へ飛ぶ
+async function goToWalkingPet() {
+  const state = loadWalkTimerState();
+  if (!state) return;
+  const data = await loadData();
+  for (const type of ['dog','cat']) {
+    const pet = (data[type]||[]).find(p => p.id === state.petId || `${type}-${p.id}` === state.petId);
+    if (!pet) continue;
+    currentType = type;
+    document.body.classList.toggle('cat-type', type === 'cat');
+    await openHospitalRecords(pet.id);
+    return;
   }
 }
 
@@ -5012,7 +5094,7 @@ function _applyWalkGroup(petId) {
 
 // 散歩記録を後から追加するモーダル
 function openWalkRecordAddModal() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   const dateStr = prompt('記録する日付を入力してください（例: 2025-05-23）', today);
   if (!dateStr) return;
   const minsStr = prompt('散歩時間（分）を入力してください', '30');
@@ -5619,3 +5701,6 @@ ${currentType === 'dog' ? '犬種' : '猫種'}: ${pet.breed || '不明'}
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
+
+// 起動時に散歩が動いたままなら、すぐ気づけるようバナーを出す
+window.addEventListener('load', () => { renderWalkBanner(); });
