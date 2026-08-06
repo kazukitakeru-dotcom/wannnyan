@@ -1332,7 +1332,7 @@ async function exportData(){
 
   const json=JSON.stringify(exportPayload,null,2);
   const blob=new Blob([json],{type:'application/json'});
-  const fileName=`wannyan_backup_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
+  const fileName=`wannyan_backup_${localDateStr().replace(/-/g,'')}.json`;
 
   // iPhone Safari対策
   if (navigator.share && navigator.canShare) {
