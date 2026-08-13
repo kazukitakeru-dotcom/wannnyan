@@ -2648,6 +2648,22 @@ function saveBulkExcluded(excludedSet) {
   catch(e) {}
 }
 
+// 一度「追加」した子は次回以降も既定の対象にする
+// キー: 'wannyan_bulk_incl'、値: 明示的に追加された petType-petId の配列
+function loadBulkIncluded() {
+  try { return new Set(JSON.parse(localStorage.getItem('wannyan_bulk_incl') || '[]')); }
+  catch(e) { return new Set(); }
+}
+function saveBulkIncluded(includedSet) {
+  try { localStorage.setItem('wannyan_bulk_incl', JSON.stringify([...includedSet])); }
+  catch(e) {}
+}
+
+// まとめ記録を開いた画面の子。常に対象に含め、除外もできないようにする
+function bulkCurrentKey() {
+  return (currentType && currentPetId) ? `${currentType}-${currentPetId}` : null;
+}
+
 // ──── 共通フィールドの同期ヘルパー ────
 // 指定フィールドの値を全ペット行に同期する
 async function syncBulkField(field) {
@@ -2722,16 +2738,19 @@ async function openBulkMedicalModal() {
   if (tc) tc.checked = false;
   if (fc) fc.checked = false;
 
-  // 初期対象: 家族タグがある子のみ（なければ全員）、そこから保存済み除外リストを引く
-  const hasFamilyTag = allPets.filter(p => p.familyTag);
-  const initialTargets = hasFamilyTag.length > 0 ? hasFamilyTag : allPets;
-  const savedExcluded = loadBulkExcluded();
-  // 除外リストのうち現在も存在するペットのみ有効とする
+  // 初期対象: 家族タグがある子（なければ全員）＋前回「追加」した子、から除外リストを引く。
+  // 開いた画面の子は除外リストに関係なく必ず対象にする。
   const validIds = new Set(allPets.map(p => `${p.petType}-${p.id}`));
-  const activeExcluded = new Set([...savedExcluded].filter(id => validIds.has(id)));
-  bulkTargetIds = new Set(initialTargets.map(p => `${p.petType}-${p.id}`).filter(id => !activeExcluded.has(id)));
+  const hasFamilyTag = allPets.filter(p => p.familyTag);
+  const defaultIds = (hasFamilyTag.length > 0 ? hasFamilyTag : allPets).map(p => `${p.petType}-${p.id}`);
+  // 保存済みリストのうち現在も存在するペットのみ有効とする
+  const savedIncluded = [...loadBulkIncluded()].filter(id => validIds.has(id));
+  const savedExcluded = loadBulkExcluded();
+  bulkTargetIds = new Set([...defaultIds, ...savedIncluded].filter(id => !savedExcluded.has(id)));
+  const curKey = bulkCurrentKey();
+  if (curKey && validIds.has(curKey)) bulkTargetIds.add(curKey);
 
-  renderBulkPetsList(allPets);
+  await renderBulkPetsList(allPets);
   document.getElementById('modal-bulk-medical').classList.add('open');
   _attachModalViewportFix('modal-bulk-medical');
 }
@@ -2745,7 +2764,10 @@ async function renderBulkPetsList(allPets) {
     ];
   }
 
-  const inTargets  = allPets.filter(p =>  bulkTargetIds.has(`${p.petType}-${p.id}`));
+  // 開いた画面の子を先頭に出す（sort は安定なので他の順序は変わらない）
+  const curKey = bulkCurrentKey();
+  const inTargets  = allPets.filter(p =>  bulkTargetIds.has(`${p.petType}-${p.id}`))
+    .sort((a, b) => (`${b.petType}-${b.id}` === curKey) - (`${a.petType}-${a.id}` === curKey));
   const notTargets = allPets.filter(p => !bulkTargetIds.has(`${p.petType}-${p.id}`));
 
   // 病院のセレクトオプション（個別用）
@@ -2792,8 +2814,10 @@ async function renderBulkPetsList(allPets) {
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <button onclick="event.stopPropagation();removeBulkTarget('${key}')"
-            style="border:none;background:#f3d6d6;color:#b44;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">除外</button>
+          ${key === curKey
+            ? `<span style="background:rgba(200,132,74,0.15);color:var(--accent);border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;">この子</span>`
+            : `<button onclick="event.stopPropagation();removeBulkTarget('${key}')"
+            style="border:none;background:#f3d6d6;color:#b44;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">除外</button>`}
           <span style="font-size:16px;color:var(--text-light);">›</span>
         </div>
       </div>
@@ -2943,10 +2967,13 @@ function openBulkAddPanel() {
 async function addBulkTarget(petType, petId) {
   const key = `${petType}-${petId}`;
   bulkTargetIds.add(key);
-  // 除外リストから外す（次回以降も対象に戻す）
+  // 次回以降も既定の対象にする（家族タグの有無に関係なく）
   const excluded = loadBulkExcluded();
   excluded.delete(key);
   saveBulkExcluded(excluded);
+  const included = loadBulkIncluded();
+  included.add(key);
+  saveBulkIncluded(included);
   const data = await loadData();
   const allPets = [
     ...(data.dog || []).map(p => ({...p, petType:'dog'})),
@@ -2956,7 +2983,8 @@ async function addBulkTarget(petType, petId) {
 }
 
 async function removeBulkTarget(id) {
-  if (!confirm('この子を今回のまとめ記録対象から外しますか？\n\n次回以降も除外したままにしますか？')) {
+  if (id === bulkCurrentKey()) return; // 開いた画面の子は外せない
+  if (!confirm('この子をまとめ記録の対象から外しますか？\n\n次回以降も除外したままになります。（「＋ 追加する」で戻せます）')) {
     return;
   }
   bulkTargetIds.delete(id);
@@ -2964,6 +2992,9 @@ async function removeBulkTarget(id) {
   const excluded = loadBulkExcluded();
   excluded.add(id);
   saveBulkExcluded(excluded);
+  const included = loadBulkIncluded();
+  included.delete(id);
+  saveBulkIncluded(included);
   const data = await loadData();
   const allPets = [
     ...(data.dog || []).map(p => ({...p, petType:'dog'})),
