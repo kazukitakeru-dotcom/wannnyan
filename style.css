@@ -114,6 +114,9 @@ textarea.field-input { resize: vertical; min-height: 76px; line-height: 1.6; }
 .gender-select { display: flex; gap: 8px; }
 .gender-btn { flex: 1; padding: 9px; border: 1.5px solid rgba(44,36,24,0.12); border-radius: 10px; background: var(--white); font-size: 14px; font-weight: 600; color: var(--text-mid); cursor: pointer; font-family: var(--font); transition: all 0.15s; text-align: center; }
 .gender-btn.selected { background: var(--accent); border-color: var(--accent); color: white; }
+/* 家族タグは数が増えるので折り返し、幅は中身なり */
+.family-tag-picker { flex-wrap: wrap; }
+.family-tag-picker .family-tag-chip { flex: 0 1 auto; padding: 8px 14px; font-size: 13px; }
 
 /* 問題フォルダ */
 .issue-folder { border: 1.5px solid rgba(44,36,24,0.09); border-radius: 13px; margin-bottom: 8px; overflow: hidden; background: var(--cream); }

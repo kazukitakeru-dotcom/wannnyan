@@ -484,6 +484,51 @@ async function getAllFamilyTags() {
   return [...tags];
 }
 
+// 家族タグは登録済みのものから選ばせる。自由入力だと表記ゆれで
+// 同じ家族が別グループ扱いになってしまうため、新規作成は明示的な操作にする。
+async function renderFamilyTagPicker(current) {
+  const tags = await getAllFamilyTags();
+  // 既存タグに無い値（他端末から同期された等）も選択肢として残す
+  if (current && !tags.includes(current)) tags.push(current);
+  const chip = (label, val, sel) =>
+    `<button type="button" class="gender-btn family-tag-chip${sel?' selected':''}"
+      onclick="selectFamilyTag(this,'${escHtml(val).replace(/'/g,"&#39;")}')">${escHtml(label)}</button>`;
+  return `
+    <input type="hidden" id="edit-family-tag" value="${escHtml(current)}">
+    <div class="gender-select family-tag-picker" id="family-tag-picker">
+      ${chip('未設定', '', !current)}
+      ${tags.map(t => chip(t, t, t === current)).join('')}
+      <button type="button" class="gender-btn family-tag-chip" id="family-tag-new-btn"
+        onclick="startNewFamilyTag(this)">＋ 新規</button>
+    </div>
+    <input type="text" class="field-input" id="edit-family-tag-new" style="display:none;margin-top:8px;"
+      placeholder="新しい家族タグ（例: 山田家）" oninput="onNewFamilyTagInput(this)">`;
+}
+
+function selectFamilyTag(btn, val) {
+  document.querySelectorAll('#family-tag-picker .family-tag-chip')
+    .forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('edit-family-tag').value = val;
+  const nf = document.getElementById('edit-family-tag-new');
+  if (nf) { nf.style.display = 'none'; nf.value = ''; }
+}
+
+function startNewFamilyTag(btn) {
+  document.querySelectorAll('#family-tag-picker .family-tag-chip')
+    .forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  const nf = document.getElementById('edit-family-tag-new');
+  if (!nf) return;
+  nf.style.display = 'block';
+  document.getElementById('edit-family-tag').value = nf.value.trim();
+  nf.focus();
+}
+
+function onNewFamilyTagInput(input) {
+  document.getElementById('edit-family-tag').value = input.value.trim();
+}
+
 // ========== 詳細 ==========
 async function openDetail(id) {
   const data=await loadData(); const pet=(data[currentType]||[]).find(p=>p.id===id);
@@ -622,8 +667,7 @@ async function renderDetailContent(pet, isEditing) {
         <label class="field-label">🏠 家族タグ（グループ名）</label>
         <div class="view-only field-value">${escHtml(pet.familyTag||'未設定')}</div>
         <div class="edit-only">
-          <input type="text" class="field-input" id="edit-family-tag" value="${escHtml(pet.familyTag||'')}" placeholder="例: 山田家、実家、〇〇さん宅" list="family-tag-suggestions">
-          <datalist id="family-tag-suggestions">${(await getAllFamilyTags()).map(t=>`<option value="${escHtml(t)}">`).join('')}</datalist>
+          ${await renderFamilyTagPicker(pet.familyTag||'')}
         </div>
       </div>
       <div class="detail-field">
@@ -5753,3 +5797,23 @@ if('serviceWorker' in navigator){
 
 // 起動時に散歩が動いたままなら、すぐ気づけるようバナーを出す
 window.addEventListener('load', () => { renderWalkBanner(); });
+
+// iOS でキーボードが出たとき保存ボタンが隠れないようにする。
+// .screen に transform があるため position:fixed はレイアウトビューポート基準になり、
+// visualViewport が縮んでもボタンが持ち上がらない（モーダルと同じ事情）。
+// 縮んだ分だけボタンを押し上げる。
+function _applySaveBtnViewportFix() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  document.querySelectorAll('.save-btn').forEach(btn => {
+    if (getComputedStyle(btn).display === 'none') { btn.style.transform = ''; return; }
+    const box = btn.closest('.screen') || document.getElementById('app');
+    const base = box ? box.getBoundingClientRect().height : window.innerHeight;
+    const overlap = Math.max(0, Math.round(base - vv.height - vv.offsetTop));
+    btn.style.transform = overlap > 0 ? `translateX(-50%) translateY(-${overlap}px)` : '';
+  });
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', _applySaveBtnViewportFix);
+  window.visualViewport.addEventListener('scroll', _applySaveBtnViewportFix);
+}
