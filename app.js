@@ -2637,31 +2637,48 @@ function toggleYearGroup(year) {
 // ========== まとめて通院記録 ==========
 let bulkTargetIds = new Set(); // 記録対象ペットIDセット
 
-// まとめ記録の除外メンバーを petId 単位で個別保存する
-// キー: 'wannyan_bulk_excl'、値: 除外された petType-petId の配列
-function loadBulkExcluded() {
-  try { return new Set(JSON.parse(localStorage.getItem('wannyan_bulk_excl') || '[]')); }
-  catch(e) { return new Set(); }
-}
-function saveBulkExcluded(excludedSet) {
-  try { localStorage.setItem('wannyan_bulk_excl', JSON.stringify([...excludedSet])); }
-  catch(e) {}
-}
-
-// 一度「追加」した子は次回以降も既定の対象にする
-// キー: 'wannyan_bulk_incl'、値: 明示的に追加された petType-petId の配列
-function loadBulkIncluded() {
-  try { return new Set(JSON.parse(localStorage.getItem('wannyan_bulk_incl') || '[]')); }
-  catch(e) { return new Set(); }
-}
-function saveBulkIncluded(includedSet) {
-  try { localStorage.setItem('wannyan_bulk_incl', JSON.stringify([...includedSet])); }
-  catch(e) {}
-}
-
 // まとめ記録を開いた画面の子。常に対象に含め、除外もできないようにする
 function bulkCurrentKey() {
   return (currentType && currentPetId) ? `${currentType}-${currentPetId}` : null;
+}
+
+// 追加／除外の記憶は「どの子の画面から開いたか」ごとに持つ。
+// A の画面での組み合わせと C の画面での組み合わせは別物として扱う。
+// 保存形式: { "dog-pa": ["cat-pc", ...], ... }
+// 旧形式（全員共通の配列）は、まだ記憶が無い子の初期値として引き継ぐ。
+function _loadBulkPref(storageKey, ownerKey) {
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch(e) {}
+  if (Array.isArray(raw)) return new Set(raw);
+  if (raw && ownerKey && Array.isArray(raw[ownerKey])) return new Set(raw[ownerKey]);
+  return new Set();
+}
+function _saveBulkPref(storageKey, ownerKey, set) {
+  if (!ownerKey) return;
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch(e) {}
+  if (!raw || Array.isArray(raw)) raw = {}; // 旧形式はここで新形式に置き換わる
+  raw[ownerKey] = [...set];
+  try { localStorage.setItem(storageKey, JSON.stringify(raw)); } catch(e) {}
+}
+
+// 「除外」した子は、その画面から開いたときだけ次回以降も外れたままにする
+function loadBulkExcluded(ownerKey) { return _loadBulkPref('wannyan_bulk_excl', ownerKey); }
+function saveBulkExcluded(ownerKey, set) { _saveBulkPref('wannyan_bulk_excl', ownerKey, set); }
+
+// 「追加」した子は、その画面から開いたときは次回以降も既定の対象にする
+function loadBulkIncluded(ownerKey) { return _loadBulkPref('wannyan_bulk_incl', ownerKey); }
+function saveBulkIncluded(ownerKey, set) { _saveBulkPref('wannyan_bulk_incl', ownerKey, set); }
+
+// 既定の対象: 開いた子と同じ家族タグの子。
+// 開いた子にタグが無い場合、誰もタグを使っていなければ全員、
+// 誰かが使っているなら他所の家族を混ぜないよう開いた子だけにする。
+function bulkDefaultPets(allPets, curKey) {
+  const cur = allPets.find(p => `${p.petType}-${p.id}` === curKey);
+  if (cur && cur.familyTag) return allPets.filter(p => p.familyTag === cur.familyTag);
+  const tagged = allPets.filter(p => p.familyTag);
+  if (tagged.length === 0) return allPets;
+  return cur ? [cur] : tagged;
 }
 
 // ──── 共通フィールドの同期ヘルパー ────
@@ -2738,16 +2755,15 @@ async function openBulkMedicalModal() {
   if (tc) tc.checked = false;
   if (fc) fc.checked = false;
 
-  // 初期対象: 家族タグがある子（なければ全員）＋前回「追加」した子、から除外リストを引く。
+  // 初期対象: 同じ家族タグの子＋この画面で前回「追加」した子、から除外リストを引く。
   // 開いた画面の子は除外リストに関係なく必ず対象にする。
-  const validIds = new Set(allPets.map(p => `${p.petType}-${p.id}`));
-  const hasFamilyTag = allPets.filter(p => p.familyTag);
-  const defaultIds = (hasFamilyTag.length > 0 ? hasFamilyTag : allPets).map(p => `${p.petType}-${p.id}`);
-  // 保存済みリストのうち現在も存在するペットのみ有効とする
-  const savedIncluded = [...loadBulkIncluded()].filter(id => validIds.has(id));
-  const savedExcluded = loadBulkExcluded();
-  bulkTargetIds = new Set([...defaultIds, ...savedIncluded].filter(id => !savedExcluded.has(id)));
   const curKey = bulkCurrentKey();
+  const validIds = new Set(allPets.map(p => `${p.petType}-${p.id}`));
+  const defaultIds = bulkDefaultPets(allPets, curKey).map(p => `${p.petType}-${p.id}`);
+  // 保存済みリストのうち現在も存在するペットのみ有効とする
+  const savedIncluded = [...loadBulkIncluded(curKey)].filter(id => validIds.has(id));
+  const savedExcluded = loadBulkExcluded(curKey);
+  bulkTargetIds = new Set([...defaultIds, ...savedIncluded].filter(id => !savedExcluded.has(id)));
   if (curKey && validIds.has(curKey)) bulkTargetIds.add(curKey);
 
   await renderBulkPetsList(allPets);
@@ -2967,13 +2983,14 @@ function openBulkAddPanel() {
 async function addBulkTarget(petType, petId) {
   const key = `${petType}-${petId}`;
   bulkTargetIds.add(key);
-  // 次回以降も既定の対象にする（家族タグの有無に関係なく）
-  const excluded = loadBulkExcluded();
+  // この画面から開いたときは次回以降も既定の対象にする（家族タグの有無に関係なく）
+  const owner = bulkCurrentKey();
+  const excluded = loadBulkExcluded(owner);
   excluded.delete(key);
-  saveBulkExcluded(excluded);
-  const included = loadBulkIncluded();
+  saveBulkExcluded(owner, excluded);
+  const included = loadBulkIncluded(owner);
   included.add(key);
-  saveBulkIncluded(included);
+  saveBulkIncluded(owner, included);
   const data = await loadData();
   const allPets = [
     ...(data.dog || []).map(p => ({...p, petType:'dog'})),
@@ -2984,17 +3001,18 @@ async function addBulkTarget(petType, petId) {
 
 async function removeBulkTarget(id) {
   if (id === bulkCurrentKey()) return; // 開いた画面の子は外せない
-  if (!confirm('この子をまとめ記録の対象から外しますか？\n\n次回以降も除外したままになります。（「＋ 追加する」で戻せます）')) {
+  if (!confirm('この子をまとめ記録の対象から外しますか？\n\nこの画面から開いたときは次回以降も外れたままになります。（「＋ 追加する」で戻せます）')) {
     return;
   }
   bulkTargetIds.delete(id);
-  // 除外リストに追加して永続保存（petId 単位）
-  const excluded = loadBulkExcluded();
+  // この画面から開いたときの除外として永続保存する
+  const owner = bulkCurrentKey();
+  const excluded = loadBulkExcluded(owner);
   excluded.add(id);
-  saveBulkExcluded(excluded);
-  const included = loadBulkIncluded();
+  saveBulkExcluded(owner, excluded);
+  const included = loadBulkIncluded(owner);
   included.delete(id);
-  saveBulkIncluded(included);
+  saveBulkIncluded(owner, included);
   const data = await loadData();
   const allPets = [
     ...(data.dog || []).map(p => ({...p, petType:'dog'})),
