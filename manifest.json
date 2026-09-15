@@ -1,6 +1,6 @@
 {
-  "name": "わんにゃんメモリー",
-  "short_name": "わんにゃんメモリー",
+  "name": "わんにゃんメモリー オリジン",
+  "short_name": "わんにゃんメモリー オリジン",
   "description": "犬・猫のペット記録アプリ",
   "start_url": "./index.html",
   "display": "standalone",

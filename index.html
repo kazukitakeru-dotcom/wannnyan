@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="わんにゃんメモリー">
+  <meta name="apple-mobile-web-app-title" content="わんにゃんメモリー オリジン">
   <meta name="theme-color" content="#f5ede0">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/01122.png">
@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" sizes="167x167" href="icons/01122.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/01122.png" />
 
-  <title>わんにゃんメモリー</title>
+  <title>わんにゃんメモリー オリジン</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -302,17 +302,22 @@
         <h3 class="modal-title">☁️ 同期のログイン</h3>
         <button class="modal-close" onclick="closeModal(null,'modal-sync-login')">✕</button>
       </div>
-      <div class="modal-body">
+      <!-- 入力欄は必ず <form> の中に置くこと。
+           iPhone / Mac のパスワード保存（iCloudキーチェーン）は submit を合図に
+           「保存しますか？」を出すので、div のままだと候補として出てこない。
+           ログインは type="submit"、それ以外のボタンは type="button" にする。 -->
+      <form class="modal-body" id="sync-login-form" autocomplete="on" style="margin:0"
+            onsubmit="event.preventDefault(); submitSyncLogin('signin');">
         <p class="transfer-desc">初めての端末では「新規登録」、2台目以降は同じメールアドレスとパスワードで「ログイン」してください。</p>
         <label class="field-label">メールアドレス</label>
-        <input type="email" id="sync-email" class="field-input" autocomplete="username" inputmode="email" placeholder="you@example.com">
+        <input type="email" id="sync-email" name="email" class="field-input" autocomplete="username" inputmode="email" placeholder="you@example.com">
         <label class="field-label" style="margin-top:10px">パスワード</label>
-        <input type="password" id="sync-password" class="field-input" autocomplete="current-password" placeholder="8文字以上">
+        <input type="password" id="sync-password" name="password" class="field-input" autocomplete="current-password" placeholder="8文字以上">
         <div id="sync-login-msg" class="sync-login-msg"></div>
-        <button class="btn-transfer sync" style="margin-top:12px" onclick="submitSyncLogin('signin')">ログイン</button>
-        <button class="btn-transfer subtle" style="margin-top:8px" onclick="submitSyncLogin('signup')">新規登録</button>
+        <button class="btn-transfer sync" style="margin-top:12px" type="submit">ログイン</button>
+        <button class="btn-transfer subtle" style="margin-top:8px" type="button" onclick="submitSyncLogin('signup')">新規登録</button>
         <div style="height:12px"></div>
-      </div>
+      </form>
     </div>
   </div>
 
