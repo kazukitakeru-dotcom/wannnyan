@@ -46,6 +46,7 @@ async function restoreRollback() {
   await idbSet('wannyan_hospitals_v1', snap.hospitals);
   // 送信済みの目印を消して、戻した内容を改めてクラウドへ反映させる
   await idbSet(SYNC_STATE_KEY, null);
+  await idbSet(SYNC_BASE_KEY, null);
   showToast('戻しました');
   if (typeof currentType !== 'undefined' && currentType && typeof renderList === 'function') {
     try { await renderList(); } catch (e) {}
@@ -230,7 +231,7 @@ async function _rest(path, { method = 'GET', body = null, prefer = null } = {}) 
     const t = await res.text().catch(() => '');
     throw new Error(`${res.status} ${t.slice(0, 200)}`);
   }
-  if (method === 'GET') return res.json();
+  if (method === 'GET' || /return=representation/.test(prefer || '')) return res.json();
   return null;
 }
 
@@ -333,8 +334,182 @@ async function syncNow(opts = {}) {
   }
 }
 
+// ========== 3者マージ ==========
+// ペット1匹（と病院1件）を丸ごと上書きしていたため、同期する前に2台で同じ子の記録を
+// つけると、あとから同期した側の分しか残らなかった（体重や通院記録が消えた。2026-09-22）。
+// 前回同期した時点の姿（控え）・この端末・サーバーの3つを比べ、
+//   - どちらかで足した記録 → 残す
+//   - どちらかで消した記録（控えにあって片方で無くなった） → 消す
+//   - 同じ項目を両方で違う値に変えた → あとから変えたほう
+// で1件ずつ合わせる。記録は id があれば id で、無ければ中身で見分ける。
+const SYNC_BASE_KEY = 'wannyan_sync_base_v1';
+const _BIG_STR = 2000;   // 写真などの長い文字列は控えに入れず、短い印に置き換える
+
+function _stableStr(v) {
+  if (Array.isArray(v)) return '[' + v.map(x => (x === undefined ? 'null' : _stableStr(x))).join(',') + ']';
+  if (v && typeof v === 'object') {
+    return '{' + Object.keys(v).filter(k => v[k] !== undefined).sort()
+      .map(k => JSON.stringify(k) + ':' + _stableStr(v[k])).join(',') + '}';
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+function _norm(v) {
+  if (typeof v === 'string') return v.length > _BIG_STR ? '\u0000h:' + _hash(v) : v;
+  if (Array.isArray(v)) return v.map(_norm);
+  if (v && typeof v === 'object') { const o = {}; Object.keys(v).forEach(k => { o[k] = _norm(v[k]); }); return o; }
+  return v;
+}
+const _k = v => _stableStr(_norm(v));
+const _sig = v => _hash(_k(v));   // 変わったかの判定用（キーの順番に左右されない）
+const _isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+
+function _merge3(b, l, r, localWins) {
+  if (_k(l) === _k(r)) return l;
+  if (b !== undefined) {
+    if (_k(l) === _k(b)) return r;     // この端末は変えていない
+    if (_k(r) === _k(b)) return l;     // サーバー側は変わっていない
+  }
+  if (_isObj(l) && _isObj(r)) {
+    const bo = _isObj(b) ? b : undefined;
+    const out = {};
+    new Set([...Object.keys(l), ...Object.keys(r)]).forEach(key => {
+      const inL = key in l, inR = key in r;
+      const bv = bo && (key in bo) ? bo[key] : undefined;
+      if (inL && inR) { out[key] = _merge3(bv, l[key], r[key], localWins); return; }
+      const v = inL ? l[key] : r[key];
+      // 控えにあって片方で消えている → 消えた側を採る（残った側で変えていなければ）
+      if (bo && (key in bo) && _k(v) === _k(bv)) return;
+      out[key] = v;
+    });
+    return out;
+  }
+  if (Array.isArray(l) && Array.isArray(r)) return _mergeArr(Array.isArray(b) ? b : undefined, l, r, localWins);
+  return localWins ? l : r;
+}
+
+// 配列の要素に見分けるための鍵を付ける。id があれば id、無ければ中身（同じ中身が複数あれば何個目か）
+function _keyed(arr) {
+  const count = new Map();
+  return (arr || []).map(x => {
+    let key;
+    if (_isObj(x) && x.id != null && x.id !== '') key = 'id:' + String(x.id);
+    else {
+      const v = 'v:' + _k(x);
+      const n = (count.get(v) || 0) + 1; count.set(v, n);
+      key = v + '#' + n;
+    }
+    return [key, x];
+  });
+}
+function _mergeArr(b, l, r, localWins) {
+  const bm = b ? new Map(_keyed(b)) : null;
+  const lk = _keyed(l), rk = _keyed(r);
+  const lm = new Map(lk), rm = new Map(rk);
+  const out = [], seen = new Set();
+  [...lk, ...rk].forEach(([key]) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    const inL = lm.has(key), inR = rm.has(key), inB = !!bm && bm.has(key);
+    if (inL && inR) { out.push(key.startsWith('id:') ? _merge3(inB ? bm.get(key) : undefined, lm.get(key), rm.get(key), localWins) : lm.get(key)); return; }
+    const v = inL ? lm.get(key) : rm.get(key);
+    // 控えにあって片方で消えている → 消す（残った側で変えていなければ）
+    if (inB && _k(v) === _k(bm.get(key))) return;
+    out.push(v);
+  });
+  return out;
+}
+
+async function _loadBase() {
+  const b = await idbGet(SYNC_BASE_KEY);
+  return (b && typeof b === 'object') ? { pets: b.pets || {}, hospitals: b.hospitals || {} } : { pets: {}, hospitals: {} };
+}
+async function _saveBase(b) { await idbSet(SYNC_BASE_KEY, b); }
+
+// ---- 1行ぶんを手元に取り込む（ペット） ----
+//   手元に未送信の変更があれば3者マージ、無ければサーバーの内容をそのまま採る。
+function _applyPetRow(state, base, data, row) {
+  const id = row.pet_id;
+  let type = null, idx = -1;
+  ['dog', 'cat'].forEach(t => { const i = data[t].findIndex(p => String(p.id) === id); if (i !== -1) { type = t; idx = i; } });
+  const local = idx !== -1 ? data[type][idx] : null;
+  const localChanged = !!local && state.pets[id] !== _sig(local);
+  const localWins = (state.touched[id] || 0) > (Date.parse(row.updated_at) || 0);
+  const b = base.pets[id];
+
+  // この端末で消した子（同期済みで、サーバー側はその後変わっていない）は復活させない
+  if (!local && !row.deleted && state.pets[id] !== undefined && state.pets[id] === _sig(row.data)) {
+    state.petAt[id] = row.updated_at;
+    return;
+  }
+
+  if (row.deleted) {
+    // 消された子。ただし、この端末でその後に記録を足していたら消さずに残す（送り直される）
+    if (local && localChanged && b !== undefined && _k(local) !== _k(b)) {
+      delete state.pets[id]; delete base.pets[id]; delete state.petAt[id];
+      return;
+    }
+    if (local) data[type].splice(idx, 1);
+    delete state.pets[id]; delete base.pets[id]; delete state.touched[id];
+    state.petAt[id] = row.updated_at;
+    return;
+  }
+
+  let next;
+  if (!local) next = row.data;
+  else if (!localChanged) next = row.data;
+  else next = _merge3(b, local, row.data, localWins);
+
+  const remoteType = row.pet_type === 'cat' ? 'cat' : 'dog';
+  if (local) data[type][idx] = next;          // 並び順を保つため同じ位置に戻す
+  else data[remoteType].push(next);
+
+  state.pets[id] = _sig(row.data);   // サーバーの内容。next と違えば送信側で送られる
+  base.pets[id] = _norm(row.data);
+  state.petAt[id] = row.updated_at;
+  if (_k(next) === _k(row.data)) delete state.touched[id];
+}
+
+// ---- 1行ぶんを手元に取り込む（病院） ----
+function _applyHospRow(state, base, list, row) {
+  const id = row.hospital_id;
+  const idx = list.findIndex(h => String(h.id) === id);
+  const local = idx !== -1 ? list[idx] : null;
+  const tk = 'h:' + id;
+  const localChanged = !!local && state.hospitals[id] !== _sig(local);
+  const localWins = (state.touched[tk] || 0) > (Date.parse(row.updated_at) || 0);
+  const b = base.hospitals[id];
+
+  if (!local && !row.deleted && state.hospitals[id] !== undefined && state.hospitals[id] === _sig(row.data)) {
+    state.hospAt[id] = row.updated_at;
+    return;
+  }
+
+  if (row.deleted) {
+    if (local && localChanged && b !== undefined && _k(local) !== _k(b)) {
+      delete state.hospitals[id]; delete base.hospitals[id]; delete state.hospAt[id];
+      return;
+    }
+    if (local) list.splice(idx, 1);
+    delete state.hospitals[id]; delete base.hospitals[id]; delete state.touched[tk];
+    state.hospAt[id] = row.updated_at;
+    return;
+  }
+  const next = (!local || !localChanged) ? row.data : _merge3(b, local, row.data, localWins);
+  if (local) list[idx] = next; else list.push(next);
+  state.hospitals[id] = _sig(row.data);
+  base.hospitals[id] = _norm(row.data);
+  state.hospAt[id] = row.updated_at;
+  if (_k(next) === _k(row.data)) delete state.touched[tk];
+}
+
+function _ensureMaps(state) {
+  state.pets = state.pets || {}; state.hospitals = state.hospitals || {}; state.touched = state.touched || {};
+  state.petAt = state.petAt || {}; state.hospAt = state.hospAt || {};
+}
+
 // ---- 取得 ----
 async function _pull(state) {
+  _ensureMaps(state);
   const since = state.lastPulledAt ? `&updated_at=gt.${encodeURIComponent(state.lastPulledAt)}` : '';
   const [remotePets, remoteHosps] = await Promise.all([
     _restAll(`wannyan_pets?select=pet_id,pet_type,data,updated_at,deleted&order=updated_at.asc,pet_id.asc${since}`),
@@ -347,51 +522,21 @@ async function _pull(state) {
 
   let newest = state.lastPulledAt;
   const bump = ts => { if (!newest || ts > newest) newest = ts; };
+  const base = await _loadBase();
 
-  // --- ペット ---
   if (remotePets.length) {
     const data = await idbGet('wannyan_v2') || { dog: [], cat: [] };
     if (!Array.isArray(data.dog)) data.dog = [];
     if (!Array.isArray(data.cat)) data.cat = [];
-
-    remotePets.forEach(row => {
-      bump(row.updated_at);
-      const remoteMs = Date.parse(row.updated_at);
-      // ローカルに未送信の変更があり、そちらの方が新しいなら残す
-      const touched = state.touched[row.pet_id];
-      if (touched && touched > remoteMs) return;
-
-      ['dog', 'cat'].forEach(t => {
-        const i = data[t].findIndex(p => String(p.id) === row.pet_id);
-        if (i !== -1) data[t].splice(i, 1);
-      });
-      if (!row.deleted) {
-        const type = row.pet_type === 'cat' ? 'cat' : 'dog';
-        data[type].push(row.data);
-      }
-      state.pets[row.pet_id] = _hash(JSON.stringify(row.data));
-      delete state.touched[row.pet_id];
-    });
+    remotePets.forEach(row => { bump(row.updated_at); _applyPetRow(state, base, data, row); });
     await idbSet('wannyan_v2', data);
   }
-
-  // --- 病院 ---
   if (remoteHosps.length) {
     const list = (await idbGet('wannyan_hospitals_v1')) || [];
-    remoteHosps.forEach(row => {
-      bump(row.updated_at);
-      const remoteMs = Date.parse(row.updated_at);
-      const touched = state.touched['h:' + row.hospital_id];
-      if (touched && touched > remoteMs) return;
-
-      const i = list.findIndex(h => String(h.id) === row.hospital_id);
-      if (i !== -1) list.splice(i, 1);
-      if (!row.deleted) list.push(row.data);
-      state.hospitals[row.hospital_id] = _hash(JSON.stringify(row.data));
-      delete state.touched['h:' + row.hospital_id];
-    });
+    remoteHosps.forEach(row => { bump(row.updated_at); _applyHospRow(state, base, list, row); });
     await idbSet('wannyan_hospitals_v1', list);
   }
+  await _saveBase(base);
 
   // commit の順と now() のわずかなズレで取りこぼさないよう、少しだけ巻き戻す
   if (newest) state.lastPulledAt = new Date(Date.parse(newest) - PULL_MARGIN_MS).toISOString();
@@ -402,67 +547,108 @@ async function _pull(state) {
   }
 }
 
+// ---- 1行を書き込む（前回読んだあとで他の端末が書いていたら書かない） ----
+//   返り値: 書けたら新しい updated_at、他の端末が先に書いていたら null
+async function _writeRow(table, pk, id, fields, at, userId) {
+  if (at) {
+    const rows = await _rest(
+      `${table}?user_id=eq.${userId}&${pk}=eq.${encodeURIComponent(id)}&updated_at=eq.${encodeURIComponent(at)}`,
+      { method: 'PATCH', body: fields, prefer: 'return=representation' });
+    return rows && rows[0] ? rows[0].updated_at : null;
+  }
+  const rows = await _rest(`${table}?on_conflict=user_id,${pk}`, {
+    method: 'POST', body: [{ user_id: userId, [pk]: id, ...fields }],
+    prefer: 'resolution=merge-duplicates,return=representation' });
+  return rows && rows[0] ? rows[0].updated_at : new Date().toISOString();
+}
+
 // ---- 送信 ----
 async function _push(state) {
+  _ensureMaps(state);
   const userId = (sbLoadSession() || {}).user_id;
   if (!userId) throw new Error('ユーザーIDが取れません');
+  const base = await _loadBase();
 
   // --- ペット ---
-  const data = (await idbGet('wannyan_v2')) || { dog: [], cat: [] };
-  const rows = [];
-  const seen = new Set();
-
-  ['dog', 'cat'].forEach(type => {
-    (data[type] || []).forEach(pet => {
-      const id = String(pet.id);
-      seen.add(id);
-      const h = _hash(JSON.stringify(pet));
-      if (state.pets[id] === h) return; // 変わっていない
-      // updated_at は送らない。サーバー側のトリガが now() を入れる。
-      // 端末の時計で入れると、時計がずれた端末の行が差分同期の網から永久に漏れる。
-      rows.push({ user_id: userId, pet_id: id, pet_type: type, data: pet, deleted: false });
+  for (let round = 0; round < 3; round++) {
+    const data = (await idbGet('wannyan_v2')) || { dog: [], cat: [] };
+    const jobs = [];
+    const seen = new Set();
+    ['dog', 'cat'].forEach(type => {
+      (data[type] || []).forEach(pet => {
+        const id = String(pet.id);
+        seen.add(id);
+        if (state.pets[id] === _sig(pet)) return; // 変わっていない
+        jobs.push({ id, fields: { pet_type: type, data: pet, deleted: false } });
+      });
     });
-  });
-  // ローカルで消えた子は削除フラグを立てる
-  Object.keys(state.pets).forEach(id => {
-    if (seen.has(id)) return;
-    rows.push({ user_id: userId, pet_id: id, pet_type: 'dog', data: {}, deleted: true });
-  });
-
-  if (rows.length) {
-    await _rest('wannyan_pets', { method: 'POST', body: rows,
-      prefer: 'resolution=merge-duplicates,return=minimal' });
-    rows.forEach(r => {
-      if (r.deleted) { delete state.pets[r.pet_id]; }
-      else { state.pets[r.pet_id] = _hash(JSON.stringify(r.data)); }
-      delete state.touched[r.pet_id];
+    // ローカルで消えた子は削除フラグを立てる
+    Object.keys(state.pets).forEach(id => {
+      if (!seen.has(id)) jobs.push({ id, fields: { pet_type: 'dog', data: {}, deleted: true } });
     });
+    if (!jobs.length) break;
+
+    let conflict = false;
+    for (const job of jobs) {
+      // 前の版から更新した直後などで、サーバーの行の時刻を知らないときは先に読んで合わせる
+      if (!state.petAt[job.id] && state.pets[job.id] !== undefined) { conflict = true; continue; }
+      const at = await _writeRow('wannyan_pets', 'pet_id', job.id, job.fields, state.petAt[job.id], userId);
+      if (!at) { conflict = true; continue; }
+      state.petAt[job.id] = at;
+      if (job.fields.deleted) { delete state.pets[job.id]; delete base.pets[job.id]; }
+      else { state.pets[job.id] = _sig(job.fields.data); base.pets[job.id] = _norm(job.fields.data); }
+      delete state.touched[job.id];
+    }
+    if (!conflict) break;
+    // 他の端末が先に書いていた子を読み直して合わせ、もう一度送る
+    const ids = jobs.map(j => j.id);
+    const rows = await _rest(`wannyan_pets?select=pet_id,pet_type,data,updated_at,deleted&pet_id=in.(${ids.map(encodeURIComponent).join(',')})`);
+    const fresh = (await idbGet('wannyan_v2')) || { dog: [], cat: [] };
+    if (!Array.isArray(fresh.dog)) fresh.dog = [];
+    if (!Array.isArray(fresh.cat)) fresh.cat = [];
+    (rows || []).forEach(row => { if (row.updated_at !== state.petAt[row.pet_id]) _applyPetRow(state, base, fresh, row); });
+    ids.forEach(id => { if (!(rows || []).some(r => r.pet_id === id)) delete state.petAt[id]; });
+    await idbSet('wannyan_v2', fresh);
   }
 
   // --- 病院 ---
-  const hosps = (await idbGet('wannyan_hospitals_v1')) || [];
-  const hRows = [];
-  const hSeen = new Set();
-  hosps.forEach(h => {
-    const id = String(h.id);
-    hSeen.add(id);
-    const hh = _hash(JSON.stringify(h));
-    if (state.hospitals[id] === hh) return;
-    hRows.push({ user_id: userId, hospital_id: id, data: h, deleted: false });
-  });
-  Object.keys(state.hospitals).forEach(id => {
-    if (hSeen.has(id)) return;
-    hRows.push({ user_id: userId, hospital_id: id, data: {}, deleted: true });
-  });
-
-  if (hRows.length) {
-    await _rest('wannyan_hospitals', { method: 'POST', body: hRows,
-      prefer: 'resolution=merge-duplicates,return=minimal' });
-    hRows.forEach(r => {
-      if (r.deleted) { delete state.hospitals[r.hospital_id]; }
-      else { state.hospitals[r.hospital_id] = _hash(JSON.stringify(r.data)); }
-      delete state.touched['h:' + r.hospital_id];
+  for (let round = 0; round < 3; round++) {
+    const hosps = (await idbGet('wannyan_hospitals_v1')) || [];
+    const jobs = [];
+    const seen = new Set();
+    hosps.forEach(h => {
+      const id = String(h.id);
+      seen.add(id);
+      if (state.hospitals[id] === _sig(h)) return;
+      jobs.push({ id, fields: { data: h, deleted: false } });
     });
+    Object.keys(state.hospitals).forEach(id => {
+      if (!seen.has(id)) jobs.push({ id, fields: { data: {}, deleted: true } });
+    });
+    if (!jobs.length) break;
+
+    let conflict = false;
+    for (const job of jobs) {
+      if (!state.hospAt[job.id] && state.hospitals[job.id] !== undefined) { conflict = true; continue; }
+      const at = await _writeRow('wannyan_hospitals', 'hospital_id', job.id, job.fields, state.hospAt[job.id], userId);
+      if (!at) { conflict = true; continue; }
+      state.hospAt[job.id] = at;
+      if (job.fields.deleted) { delete state.hospitals[job.id]; delete base.hospitals[job.id]; }
+      else { state.hospitals[job.id] = _sig(job.fields.data); base.hospitals[job.id] = _norm(job.fields.data); }
+      delete state.touched['h:' + job.id];
+    }
+    if (!conflict) break;
+    const ids = jobs.map(j => j.id);
+    const rows = await _rest(`wannyan_hospitals?select=hospital_id,data,updated_at,deleted&hospital_id=in.(${ids.map(encodeURIComponent).join(',')})`);
+    const fresh = (await idbGet('wannyan_hospitals_v1')) || [];
+    (rows || []).forEach(row => { if (row.updated_at !== state.hospAt[row.hospital_id]) _applyHospRow(state, base, fresh, row); });
+    ids.forEach(id => { if (!(rows || []).some(r => r.hospital_id === id)) delete state.hospAt[id]; });
+    await idbSet('wannyan_hospitals_v1', fresh);
+  }
+
+  await _saveBase(base);
+  if (typeof currentType !== 'undefined' && currentType && typeof renderList === 'function') {
+    try { await renderList(); } catch (e) {}
   }
 }
 
@@ -482,7 +668,7 @@ async function _push(state) {
       ['dog', 'cat'].forEach(type => {
         (data[type] || []).forEach(pet => {
           const id = String(pet.id);
-          if (state.pets[id] !== _hash(JSON.stringify(pet))) state.touched[id] = now;
+          if (state.pets[id] !== _sig(pet)) state.touched[id] = now;
         });
       });
       await _saveSyncState(state);
@@ -498,7 +684,7 @@ async function _push(state) {
       const now = Date.now();
       (list || []).forEach(h => {
         const id = String(h.id);
-        if (state.hospitals[id] !== _hash(JSON.stringify(h))) state.touched['h:' + id] = now;
+        if (state.hospitals[id] !== _sig(h)) state.touched['h:' + id] = now;
       });
       await _saveSyncState(state);
     } catch (e) {}
