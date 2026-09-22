@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wannyan-v52';
+const CACHE_NAME = 'wannyan-v53';
 const ASSETS = [
   './',
   './index.html',
@@ -9,9 +9,10 @@ const ASSETS = [
   './manifest.json',
 ];
 
+// インストール時は cache: 'reload' で必ず取り直す。通すと新しい版のキャッシュに古いファイルが入る
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
   );
   self.skipWaiting();
 });
